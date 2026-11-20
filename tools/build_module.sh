@@ -4,6 +4,7 @@ set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 APK="$ROOT/android/app/build/outputs/apk/debug/app-debug.apk"
 [ -f "$APK" ] || { echo "build the APK first (./gradlew assembleDebug)"; exit 1; }
+mkdir -p "$ROOT/module/system/priv-app/VoWiFi"
 cp "$APK" "$ROOT/module/system/priv-app/VoWiFi/VoWiFi.apk"
 mkdir -p "$ROOT/dist"
 rm -f "$ROOT/dist/vowifi-ims-module.zip"
