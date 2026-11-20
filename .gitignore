@@ -1,0 +1,20 @@
+# Local / private
+backup/
+dist/
+tools/build/
+tools/device.local
+*.log
+local.properties
+
+# Build outputs (rebuild with the commands in README)
+*.apk
+*.aar
+android/**/build/
+android/.gradle/
+android/.kotlin/
+android/.idea/
+*.iml
+android/imsservice/libs/ims-stubs.jar
+
+# Local dev notes for coding agents
+AGENTS.md

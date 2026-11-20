@@ -1,0 +1,729 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>WiFi 通话</title>
+<style>
+:root {
+  --bg: #f2f2f7; --card: #ffffff; --ink: #1c1c1e; --dim: #3c3c43b3; --faint: #3c3c4380;
+  --line: #3c3c431f; --accent: #007aff; --good: #34c759; --warn: #ff9500; --bad: #ff3b30;
+  --field: #7676801f; --seg-on: #ffffff; --pending: #d1d1d6; --bar: #f9f9f9e6; --shadow: 0 1px 2px #0000000d;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #000000; --card: #1c1c1e; --ink: #ffffff; --dim: #ebebf5b3; --faint: #ebebf580;
+    --line: #54545866; --accent: #0a84ff; --good: #30d158; --warn: #ff9f0a; --bad: #ff453a;
+    --field: #7676803d; --seg-on: #636366; --pending: #3a3a3c; --bar: #1c1c1ee6; --shadow: none;
+  }
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: var(--bg); color: var(--ink);
+  font: 15px/1.45 -apple-system, "PingFang SC", "Noto Sans CJK SC", "HarmonyOS Sans SC", sans-serif; }
+/* App shell: only <main> scrolls, so the tab bar never moves with the page. */
+body { display: flex; flex-direction: column; }
+main { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  padding: calc(env(safe-area-inset-top) + 6px) 16px 28px; }
+button { font: inherit; color: inherit; cursor: pointer; }
+svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+h1 { font-size: 30px; font-weight: 700; letter-spacing: .2px; margin: 10px 4px 14px; }
+.head { display: flex; align-items: center; gap: 8px; }
+.head h1 { flex: 1; }
+.sect { font-size: 13px; color: var(--faint); margin: 22px 16px 7px; }
+.foot { font-size: 12px; color: var(--faint); margin: 7px 16px 0; line-height: 1.5; }
+.card { background: var(--card); border-radius: 16px; box-shadow: var(--shadow); }
+.pad { padding: 16px; }
+.row { display: flex; align-items: center; gap: 12px; }
+.grow { flex: 1; min-width: 0; }
+.ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dim { color: var(--dim); } .faint { color: var(--faint); }
+.small { font-size: 13px; } .tiny { font-size: 12px; }
+
+/* list rows inside a card */
+.item { display: flex; align-items: center; gap: 12px; padding: 13px 16px; min-height: 52px; position: relative; }
+.item + .item::before { content: ""; position: absolute; top: 0; left: 16px; right: 0; height: 1px; background: var(--line); }
+.item .t { font-size: 15px; }
+.item .s { font-size: 12px; color: var(--faint); margin-top: 2px; line-height: 1.45; }
+.item.tap:active { background: var(--field); }
+.chev { color: var(--faint); transition: transform .2s; }
+.chev.open { transform: rotate(180deg); }
+
+/* switch */
+.switch { position: relative; width: 51px; height: 31px; flex: none; }
+.switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; z-index: 1; }
+.switch span { position: absolute; inset: 0; border-radius: 31px; background: var(--pending); transition: background .2s; }
+.switch span::after { content: ""; position: absolute; left: 2px; top: 2px; width: 27px; height: 27px; border-radius: 50%;
+  background: #fff; box-shadow: 0 3px 8px #00000026, 0 1px 1px #00000029; transition: transform .2s; }
+.switch input:checked + span { background: var(--good); }
+.switch input:checked + span::after { transform: translateX(20px); }
+
+/* hero */
+.hero { padding: 16px 16px 14px; }
+.logo { width: 46px; height: 46px; border-radius: 12px; background: var(--accent); color: #fff; display: grid; place-items: center; flex: none; }
+.logo svg.i { width: 26px; height: 26px; stroke-width: 2; }
+.hero .name { font-size: 19px; font-weight: 600; }
+.status { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 99px; font-size: 13px; font-weight: 600; }
+.pill i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.pill.live i { animation: blink 1.2s infinite alternate; }
+@keyframes blink { from { opacity: .3 } to { opacity: 1 } }
+.ghost { border: 0; background: var(--field); color: var(--accent); border-radius: 99px; padding: 5px 12px 5px 9px;
+  font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }
+.ghost svg.i { width: 16px; height: 16px; stroke-width: 2.2; }
+.iconbtn { width: 36px; height: 36px; border-radius: 50%; border: 0; background: var(--field); color: var(--accent);
+  display: grid; place-items: center; flex: none; }
+.iconbtn svg.i { width: 18px; height: 18px; }
+.iconbtn.danger { color: var(--bad); }
+.err { color: var(--warn); font-size: 12px; margin-top: 10px; word-break: break-word; line-height: 1.5; }
+
+/* steps */
+.steps { display: flex; margin: 16px -4px 2px; }
+.step { flex: 1; text-align: center; position: relative; font-size: 11.5px; color: var(--faint); }
+.step::before { content: ""; position: absolute; top: 12px; right: 50%; width: 100%; height: 2px; background: var(--pending); z-index: 0; }
+.step:first-child::before { display: none; }
+.step.done::before, .step.active::before, .step.fail::before { background: var(--good); }
+.dot { position: relative; z-index: 1; width: 26px; height: 26px; border-radius: 50%; margin: 0 auto 5px; display: grid; place-items: center;
+  background: var(--card); border: 2px solid var(--pending); color: #fff; }
+.dot svg.i { width: 14px; height: 14px; stroke-width: 3; }
+.step.done .dot { background: var(--good); border-color: var(--good); }
+.step.fail .dot { background: var(--bad); border-color: var(--bad); }
+.step.active .dot { border-color: var(--accent); }
+.step.active .dot::after { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); animation: blink .8s infinite alternate; }
+.step.done, .step.active { color: var(--ink); font-weight: 600; }
+.step.fail { color: var(--bad); font-weight: 600; }
+
+.stats { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--line); }
+.stat { padding: 12px 16px; }
+.stat + .stat { border-left: 1px solid var(--line); }
+.stat .k { font-size: 12px; color: var(--faint); }
+.stat .v { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; margin-top: 1px; }
+.kv { display: grid; grid-template-columns: 76px 1fr; gap: 7px 12px; font-size: 12.5px; padding: 0 16px 14px; }
+.kv div:nth-child(odd) { color: var(--faint); }
+.kv div:nth-child(even) { word-break: break-all; white-space: pre-line; font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 12px; }
+
+/* sims */
+.sims { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.sim { position: relative; padding: 13px 14px; border: 2px solid transparent; border-radius: 16px; min-width: 0; }
+.sim.sel { border-color: var(--accent); }
+.sim .n { font-weight: 600; padding-right: 22px; }
+.sim .check { position: absolute; top: 11px; right: 11px; width: 20px; height: 20px; border-radius: 50%; background: var(--accent);
+  color: #fff; display: none; place-items: center; }
+.sim .check svg.i { width: 12px; height: 12px; stroke-width: 3.2; }
+.sim.sel .check { display: grid; }
+.sim .slot { display: inline-block; font-size: 11px; font-weight: 600; color: var(--dim); background: var(--field); border-radius: 6px; padding: 1px 6px; margin-bottom: 6px; }
+
+/* segmented */
+.seg { display: flex; background: var(--field); border-radius: 9px; padding: 2px; }
+.seg button { flex: 1; border: 0; background: transparent; padding: 7px 4px; border-radius: 7px; font-size: 13px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: background .15s; }
+.seg button.on { background: var(--seg-on); box-shadow: 0 3px 8px #0000001f, 0 1px 1px #0000000a; font-weight: 600; }
+
+/* form */
+.lbl { font-size: 12px; color: var(--faint); margin: 14px 2px 6px; }
+.lbl:first-child { margin-top: 0; }
+input[type=text], input[type=password], textarea { width: 100%; border: 0; border-radius: 10px; background: var(--field); color: var(--ink);
+  padding: 10px 12px; font: inherit; font-size: 14px; outline: none; }
+input::placeholder, textarea::placeholder { color: var(--faint); }
+textarea { resize: vertical; min-height: 66px; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.btn { width: 100%; border: 0; border-radius: 12px; background: var(--accent); color: #fff; padding: 13px; font-weight: 600; }
+.btn:disabled { opacity: .4; }
+.btn.light { background: var(--field); color: var(--accent); }
+.btn.red { background: var(--bad); }
+.savebar { position: sticky; bottom: 12px; z-index: 6;
+  display: none; box-shadow: 0 6px 20px #00000033; }
+.savebar.on { display: block; }
+
+/* tabs */
+.tabs { flex: none; display: flex; background: var(--card); border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom); z-index: 5; }
+.tabs button { flex: 1; border: 0; background: transparent; color: var(--faint); padding: 7px 0 9px; font-size: 11px;
+  display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.tabs svg.i { width: 24px; height: 24px; }
+.tabs button.on { color: var(--accent); }
+.page { display: none; }
+.page.on { display: block; animation: fade .18s; }
+@keyframes fade { from { opacity: 0 } to { opacity: 1 } }
+
+/* logs */
+.log { font: 11.5px/1.55 ui-monospace, "SFMono-Regular", Menlo, monospace; padding: 10px 12px; word-break: break-all; }
+.log div { padding: 3px 0; border-bottom: 1px solid var(--line); }
+.log div:last-child { border-bottom: 0; }
+.log b { font-weight: 400; color: var(--faint); margin-right: 6px; }
+.log .W { color: var(--warn); } .log .E { color: var(--bad); } .log .D { color: var(--faint); }
+
+/* modal */
+.modal { position: fixed; inset: 0; background: #0000004d; display: none; align-items: center; justify-content: center; z-index: 10; padding: 28px; }
+.modal.on { display: flex; animation: fade .15s; }
+.dialog { background: var(--card); border-radius: 18px; padding: 22px 20px 16px; width: 100%; max-width: 320px; text-align: center; }
+.dialog .t { font-size: 17px; font-weight: 600; }
+.dialog .x { font-size: 13px; color: var(--dim); margin-top: 6px; line-height: 1.5; }
+.dialog .btns { display: flex; gap: 10px; margin-top: 18px; }
+.dialog .btns.col { flex-direction: column; gap: 8px; }
+.spinner { width: 28px; height: 28px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--accent);
+  animation: spin .8s linear infinite; margin: 0 auto 12px; }
+@keyframes spin { to { transform: rotate(360deg) } }
+.banner { border-radius: 14px; padding: 11px 14px; margin-bottom: 12px; font-size: 13px; display: none; align-items: flex-start; gap: 8px;
+  background: color-mix(in srgb, var(--bad) 12%, var(--card)); color: var(--bad); }
+.banner.on { display: flex; }
+.banner svg.i { width: 18px; height: 18px; margin-top: 1px; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-call" viewBox="0 0 24 24"><path d="M5 4h3.5l1.8 4.6-2.3 1.4a11 11 0 0 0 5 5l1.4-2.3L19 14.5V18a2 2 0 0 1-2 2A15 15 0 0 1 3 6a2 2 0 0 1 2-2z"/><path d="M15 3.5a5.5 5.5 0 0 1 5.5 5.5"/><path d="M15 7a2 2 0 0 1 2 2"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M7 7l10 10M17 7 7 17"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4.5 6h.01M4.5 12h.01M4.5 18h.01" stroke-width="2.6"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5h.01"/></symbol>
+</svg>
+
+<main id="main">
+<div id="banner" class="banner"><svg class="i"><use href="#i-alert"/></svg><span id="banner-t"></span></div>
+
+<!-- ============================================================ status -->
+<section id="page-home" class="page on">
+  <h1>WiFi 通话</h1>
+
+  <div class="card">
+    <div class="hero">
+      <div class="row">
+        <div class="logo"><svg class="i"><use href="#i-call"/></svg></div>
+        <div class="grow">
+          <div id="name" class="name ellipsis">—</div>
+          <div id="sub" class="tiny faint ellipsis">—</div>
+        </div>
+        <label class="switch"><input id="wfc" type="checkbox"><span></span></label>
+      </div>
+      <div class="status">
+        <span id="pill" class="pill"><i></i><span id="pill-t">读取中…</span></span>
+        <span class="grow"></span>
+        <button id="restart" class="ghost" style="display:none"><svg class="i"><use href="#i-refresh"/></svg>重启</button>
+      </div>
+      <div id="steps" class="steps"></div>
+      <div id="error" class="err" style="display:none"></div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="k">号码</div><div id="number" class="v ellipsis">—</div></div>
+      <div class="stat"><div class="k">在线时长</div><div id="uptime" class="v">—</div></div>
+    </div>
+    <div id="morebox">
+      <div class="item tap" id="more" style="border-top:1px solid var(--line)">
+        <div class="grow t">连接详情</div><svg class="i chev" id="chev"><use href="#i-down"/></svg>
+      </div>
+      <div id="details" class="kv" style="display:none"></div>
+    </div>
+  </div>
+
+  <div class="sect">SIM 卡</div>
+  <div id="sims" class="sims"><div class="card pad faint small">正在读取 SIM…</div></div>
+  <div class="card" style="margin-top:10px">
+    <div class="item">
+      <div class="grow"><div class="t">开启时将此卡切换为 2G</div>
+        <div class="s">停用这张卡的 4G/5G，让手机自带的 VoLTE 下线，避免与 WiFi 通话同号注册抢走来电。关闭 WiFi 通话或此开关后自动恢复。</div></div>
+      <label class="switch"><input id="radio" type="checkbox"><span></span></label>
+    </div>
+  </div>
+
+  <div class="sect">出口网络</div>
+  <div class="card">
+    <div style="padding:12px 12px 0"><div class="seg" id="net">
+      <button data-v="auto">跟随系统/代理</button><button data-v="wifi">WiFi</button><button data-v="cellular">移动数据</button>
+    </div></div>
+    <div class="item">
+      <div class="grow"><div class="s" style="margin:0">出口 IP</div><div id="exitip" class="t ellipsis">—</div></div>
+      <button id="exitbtn" class="iconbtn" aria-label="重新检测"><svg class="i"><use href="#i-refresh"/></svg></button>
+    </div>
+  </div>
+  <div id="nethint" class="foot"></div>
+
+  <div class="sect">接管系统 IMS 的卡槽</div>
+  <div id="slots" class="card"></div>
+  <div class="foot">选中的卡槽开机后由本模块提供系统 IMS：系统拨号器、短信和设置里的 WLAN 通话都走这里。紧急呼叫始终走手机自带的蜂窝网络。</div>
+</section>
+
+<!-- ============================================================ settings -->
+<section id="page-settings" class="page">
+  <h1>设置</h1>
+
+  <div class="sect">代理（可选）</div>
+  <div class="card pad">
+    <div class="lbl">SOCKS5 地址</div>
+    <input type="text" id="s-socks5" placeholder="host:port，例如 127.0.0.1:7890">
+    <div class="pair" style="margin-top:8px">
+      <input type="text" id="s-socksUser" placeholder="用户名">
+      <input type="password" id="s-socksPass" placeholder="密码">
+    </div>
+  </div>
+  <div class="foot">隧道经 SOCKS5（需支持 UDP）连接 ePDG；留空则直连或跟随 VPN。</div>
+
+  <div class="sect">ePDG 域名解析</div>
+  <div class="card pad">
+    <div class="seg" id="s-dnsMode"><button data-v="system">系统 DNS</button><button data-v="doh">DoH</button><button data-v="static">手动 IP</button></div>
+    <div id="dns-doh"><div class="lbl">DoH 服务器，逗号分隔</div><textarea id="s-dohServers"></textarea></div>
+    <div id="dns-static"><div class="lbl">ePDG IP，逗号分隔</div><input type="text" id="s-staticEpdgIp"></div>
+    <div id="dns-system" class="tiny faint" style="margin-top:10px">代理软件的 fake-IP 模式下也能工作（流量经代理转发）。</div>
+  </div>
+  <div class="card" style="margin-top:10px">
+    <div class="item"><div class="grow t">优先 IPv6</div><label class="switch"><input id="s-preferIpv6" type="checkbox"><span></span></label></div>
+  </div>
+
+  <div class="sect">IMS 参数</div>
+  <div class="card pad">
+    <div class="lbl">ePDG 域名</div><input type="text" id="s-epdg" placeholder="按运营商配置">
+    <div class="lbl">IMS 域 / Realm</div><input type="text" id="s-imsDomain" placeholder="按运营商配置">
+    <div class="lbl">备用 P-CSCF</div><input type="text" id="s-pcscf" placeholder="ePDG 未下发时使用">
+    <div class="pair">
+      <div><div class="lbl">国家码</div><input type="text" id="s-countryCode" placeholder="如 44"></div>
+      <div><div class="lbl">短信中心</div><input type="text" id="s-smsc" placeholder="+44…"></div>
+    </div>
+    <div class="lbl">号码格式</div>
+    <div class="seg" id="s-dialScheme"><button data-v="">自动</button><button data-v="sip">SIP</button><button data-v="tel">TEL</button></div>
+    <div class="lbl">SIP 安全通道（sec-agree）</div>
+    <div class="seg" id="s-secAgree"><button data-v="">自动</button><button data-v="on">开启</button><button data-v="off">关闭</button></div>
+    <div class="lbl">SIP 传输</div>
+    <div class="seg" id="s-sipTransport"><button data-v="">自动</button><button data-v="tcp">TCP</button><button data-v="udp">UDP</button></div>
+  </div>
+  <div class="foot">留空的项目按运营商配置。保存后如果 WiFi 通话正在运行，会自动重连。</div>
+
+  <div class="sect">运行</div>
+  <div class="card">
+    <div class="item"><div class="grow"><div class="t">开机自动启动</div><div class="s">上次开启 WiFi 通话时，开机后自动恢复</div></div>
+      <label class="switch"><input id="autostart" type="checkbox"><span></span></label></div>
+    <div class="item"><div class="grow"><div class="t">调试日志</div><div class="s">记录 SIP / IKE 细节</div></div>
+      <label class="switch"><input id="debug" type="checkbox"><span></span></label></div>
+  </div>
+
+  <div class="sect">恢复与卸载</div>
+  <div class="card">
+    <div class="item tap" id="restoreBtn"><div class="grow"><div class="t" style="color:var(--accent)">恢复手机原生通话</div>
+      <div class="s">关闭 WiFi 通话，恢复这张卡的 4G/5G、跨卡通话等设置，并把所有卡槽交还手机自带的通话服务。模块保留，之后打开 WiFi 通话开关即可重新接管。</div></div></div>
+    <div class="item tap" id="uninstallBtn"><div class="grow"><div class="t" style="color:var(--bad)">恢复原生并卸载模块</div>
+      <div class="s">在上一项的基础上删除后台服务并卸载本模块，重启手机后完成。</div></div></div>
+  </div>
+
+  <div class="sect">关于</div>
+  <div class="card pad tiny dim">
+    WiFi 通话 IMS 服务：用软件建立 VoWiFi（IKEv2/EAP-AKA 隧道 + IMS 注册），作为系统 IMS 服务接管 WLAN 通话，通话和短信直接用系统电话、系统短信。协议实现依据 3GPP TS 24.302 / 33.402 / 24.229 / 33.203 / 24.341 独立编写。
+    <div style="margin-top:8px;color:var(--warn)">目前仅在 realme RMX6699（Android 16 / ColorOS / 骁龙，KernelSU）上验证可用，其他机型、系统和 root 方案均未测试。</div>
+  </div>
+  <button class="btn savebar" id="save" style="margin-top:16px">保存并应用</button>
+</section>
+
+<!-- ============================================================ logs -->
+<section id="page-logs" class="page">
+  <div class="head"><h1>日志</h1>
+    <button id="logrefresh" class="iconbtn" aria-label="刷新"><svg class="i"><use href="#i-refresh"/></svg></button>
+    <button id="logclear" class="iconbtn danger" aria-label="清空"><svg class="i"><use href="#i-trash"/></svg></button></div>
+  <div class="seg" id="logfilter" style="margin-bottom:10px">
+    <button data-v="" class="on">全部</button><button data-v="I">信息</button><button data-v="W">警告</button><button data-v="E">错误</button>
+  </div>
+  <div class="card"><div id="log" class="log faint">读取中…</div></div>
+</section>
+
+</main>
+
+<nav class="tabs">
+  <button data-p="home" class="on"><svg class="i"><use href="#i-call"/></svg>状态</button>
+  <button data-p="settings"><svg class="i"><use href="#i-sliders"/></svg>设置</button>
+  <button data-p="logs"><svg class="i"><use href="#i-list"/></svg>日志</button>
+</nav>
+
+<div id="modal" class="modal"><div class="dialog">
+  <div id="m-spin" class="spinner"></div>
+  <div id="m-title" class="t"></div>
+  <div id="m-text" class="x"></div>
+  <div id="m-btns" class="btns"></div>
+</div></div>
+
+<script>
+'use strict';
+const PKG = 'app.vowifi';
+const DATA = '/data/data/' + PKG + '/files';
+const STATUS = DATA + '/webui/status.json';
+const LOG = DATA + '/logs/app.log';
+const CONF = '/data/adb/vowifi/ims.conf';
+const MODDIR = '/data/adb/modules/vowifi_ims';
+const STEPS = [['resolve', '解析'], ['ike', 'IKE'], ['auth', '认证'], ['tunnel', '隧道'], ['ims', 'IMS'], ['ready', '就绪']];
+const $ = id => document.getElementById(id);
+const icon = name => `<svg class="i"><use href="#i-${name}"/></svg>`;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// ------------------------------------------------------------ KernelSU bridge
+let cbSeq = 0;
+function exec(cmd) {
+  return new Promise(resolve => {
+    if (typeof ksu === 'undefined') { resolve({ errno: 1, stdout: '', stderr: '不在 KernelSU WebUI 中' }); return; }
+    const name = '__vw_cb' + (++cbSeq);
+    window[name] = (errno, stdout, stderr) => { delete window[name]; resolve({ errno, stdout, stderr }); };
+    try { ksu.exec(cmd, '{}', name); } catch (e) { delete window[name]; resolve({ errno: 1, stdout: '', stderr: String(e) }); }
+  });
+}
+function toast(msg) { try { ksu.toast(msg); } catch (e) { console.log(msg); } }
+const q = s => "'" + String(s).replace(/'/g, "'\\''") + "'";
+function send(cmd, arg) {
+  return exec('am broadcast -n ' + PKG + '/.control.ControlReceiver -a app.vowifi.CONTROL --es cmd ' + q(cmd) +
+    (arg !== undefined ? ' --es arg ' + q(arg) : '') + ' >/dev/null 2>&1');
+}
+function service(action) {
+  return exec('am start-foreground-service -n ' + PKG + '/.service.VoWiFiService -a ' + action + ' >/dev/null 2>&1');
+}
+
+// ------------------------------------------------------------ state
+let S = null, appAlive = true, busy = null, busyAt = 0, detailsOpen = false, lastNote = '';
+let settingsDirty = false, settingsShown = false, confirmOpen = false, slotBound = {};
+
+async function poll() {
+  const r = await exec('cat ' + STATUS + ' 2>/dev/null; echo; echo "@@"; pidof ' + PKG + ' >/dev/null && echo alive');
+  const [json, tail] = r.stdout.split('@@');
+  appAlive = /alive/.test(tail || '');
+  try { S = JSON.parse(json.trim()); } catch (e) { S = null; }
+  render();
+}
+
+function fmtDur(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const p = n => String(n).padStart(2, '0');
+  return s >= 3600 ? `${Math.floor(s / 3600)}:${p(Math.floor(s / 60) % 60)}:${p(s % 60)}` : `${Math.floor(s / 60)}:${p(s % 60)}`;
+}
+
+function statusLine(e) {
+  switch (e.phase) {
+    case 'registered': return ['已注册 · 系统电话和短信可用', 'var(--good)', false];
+    case 'waiting': {
+      const secs = Math.max(0, Math.round((e.nextRetry - Date.now()) / 1000));
+      return [secs > 0 ? `连接失败 · ${secs} 秒后重试` : '正在重试…', 'var(--warn)', false];
+    }
+    case 'idle': case '': case undefined: return ['未开启', 'var(--faint)', false];
+  }
+  const t = { resolve: '读取 SIM 并解析 ePDG…', ike: '协商 IKEv2…', auth: 'SIM 卡 EAP-AKA 认证…',
+    tunnel: '建立 IPsec 隧道…', ims: '注册 IMS…' }[e.step] || '正在连接…';
+  return [t, 'var(--accent)', true];
+}
+
+function stepStates(e) {
+  const keys = STEPS.map(s => s[0]);
+  if (e.phase === 'registered') return keys.map(() => 'done');
+  if (e.phase === 'waiting' && e.failedStep) {
+    const f = keys.indexOf(e.failedStep);
+    return keys.map((_, i) => i < f ? 'done' : i === f ? 'fail' : '');
+  }
+  if (!e.phase || e.phase === 'idle' || !e.step) return keys.map(() => '');
+  const a = Math.max(0, keys.indexOf(e.step));
+  return keys.map((_, i) => i < a ? 'done' : i === a ? 'active' : '');
+}
+
+function banner(msg) { $('banner-t').textContent = msg; $('banner').classList.toggle('on', !!msg); }
+
+function render() {
+  if (!S) {
+    banner(appAlive ? '正在等待 WiFi 通话服务写入状态…' : 'WiFi 通话服务未运行：请确认模块已安装并重启过手机。');
+    return;
+  }
+  banner(S.rootError ? '无法启动 root 辅助进程：' + S.rootError + '。请在 KernelSU 中为「WiFi 通话」授予超级用户权限。'
+    : !appAlive ? 'WiFi 通话服务当前未运行，显示的是上次的状态。' : '');
+
+  const e = S.engine, st = S.settings;
+  const running = !!e.phase && e.phase !== 'idle';
+  const sim = S.sims.find(x => x.subId === st.subId);
+  const plmn = e.plmn || (sim ? sim.mcc + sim.mnc : '');
+  $('name').textContent = sim ? sim.name : (e.carrier || '未选择 SIM 卡');
+  $('sub').textContent = [sim ? '卡槽 ' + (sim.slot + 1) : '', plmn ? 'PLMN ' + plmn : '',
+    e.carrier && sim && e.carrier !== sim.name ? e.carrier : ''].filter(Boolean).join(' · ') || '—';
+  if (!busy || busy === 'radio') $('wfc').checked = running;
+  $('restart').style.display = running ? '' : 'none';
+
+  const [line, color, live] = statusLine(e);
+  const pill = $('pill');
+  $('pill-t').textContent = line;
+  pill.style.color = color;
+  pill.style.background = `color-mix(in srgb, ${color} 13%, transparent)`;
+  pill.classList.toggle('live', live);
+  $('steps').innerHTML = stepStates(e).map((s, i) =>
+    `<div class="step ${s}"><div class="dot">${s === 'done' ? icon('check') : s === 'fail' ? icon('x') : ''}</div>${STEPS[i][1]}</div>`).join('');
+  const err = e.phase === 'waiting' && e.errorText;
+  $('error').style.display = err ? '' : 'none';
+  $('error').textContent = err || '';
+  $('number').textContent = e.number || '—';
+  $('uptime').textContent = e.phase === 'registered' && e.since > 0 ? fmtDur(Date.now() - e.since) : '—';
+  $('morebox').style.display = running ? '' : 'none';
+  $('chev').classList.toggle('open', detailsOpen);
+  $('details').style.display = detailsOpen ? '' : 'none';
+  if (detailsOpen) {
+    const kv = [['系统 IMS', S.ims.active ? '已接管此卡' : '未接管此卡'], ['ePDG', e.epdg], ['ePDG 地址', e.epdgIp],
+      ['内层地址', [e.innerIpv4, e.innerIpv6].filter(Boolean).join('\n')], ['P-CSCF', (e.pcscf || []).join('\n')],
+      ['IKE', e.ike], ['ESP', e.esp], ['SIP 安全', e.security], ['SIP 传输', e.transport], ['IMS 身份', (e.uris || []).join('\n')]];
+    $('details').innerHTML = kv.map(([k, v]) => `<div>${k}</div><div>${esc(v || '—')}</div>`).join('');
+  }
+
+  $('sims').innerHTML = S.sims.length ? S.sims.map(s => {
+    const nick = s.displayName && s.displayName !== s.name ? s.displayName : '';
+    return `<div class="card sim ${s.subId === st.subId ? 'sel' : ''}" data-sub="${s.subId}">
+      <span class="check">${icon('check')}</span>
+      <span class="slot">卡槽 ${s.slot + 1}</span>
+      <div class="n ellipsis">${esc(s.name)}</div>
+      <div class="tiny faint ellipsis">${[s.mcc + '-' + s.mnc, nick].filter(Boolean).map(esc).join(' · ')}</div>
+      <div class="tiny dim ellipsis">${esc(s.profileName)}${s.verified ? ' · 已验证' : ''}</div></div>`;
+  }).join('') : '<div class="card pad faint small">正在读取 SIM…</div>';
+
+  $('radio').checked = st.radioOffWhileOn;
+  segSet('net', st.networkMode);
+  $('exitip').textContent = S.exitChecking ? '检测中…' : (S.exitIp || '—');
+  $('nethint').textContent = {
+    auto: '走系统默认网络；开着 VPN/代理时隧道会经代理建立，网络切换时自动重连。',
+    wifi: '强制经 WiFi 直连建立隧道；开着 NetProxy 等透明代理时自动绕过代理。',
+    cellular: '强制经移动数据直连建立隧道（即使已连 WiFi）；开着 NetProxy 等透明代理时自动绕过代理。',
+  }[st.networkMode] || '';
+  $('autostart').checked = st.autoStart;
+  $('debug').checked = st.debugLog;
+  if (!settingsDirty && !settingsShown) loadSettings(st);
+  if (S.note && S.note !== lastNote) toast(S.note);
+  lastNote = S.note;
+
+  // Busy dialogs: WiFi calling switch and the 2G switch.
+  if (busy === 'restore') return;
+  if (busy === 'on' || busy === 'off') {
+    const done = busy === 'on' ? (e.phase === 'registered' || (e.phase === 'waiting' && Date.now() - busyAt > 1500))
+      : e.phase === 'idle';
+    if (done || Date.now() - busyAt > 60000) { busy = null; hideModal(); }
+    else showModal(busy === 'on' ? '正在开启 WiFi 通话' : '正在关闭 WiFi 通话',
+      busy === 'on' ? line : '断开隧道并注销 IMS', true,
+      Date.now() - busyAt > 4000 ? [['后台继续', 'light', () => { busy = null; hideModal(); }]] : []);
+  } else if (S.radioBusy) {
+    showModal(S.radioBusy.replace(/…$/, ''), '等待基带完成切换，最长约 60 秒', true, []);
+  } else if (busy === 'radio') {
+    if (Date.now() - busyAt > 3000) { busy = null; hideModal(); }
+  } else if (!confirmOpen) hideModal();
+}
+
+// ------------------------------------------------------------ modal
+function showModal(title, text, spin, btns) {
+  $('m-title').textContent = title; $('m-text').textContent = text || '';
+  $('m-spin').style.display = spin ? '' : 'none';
+  const box = $('m-btns'); box.innerHTML = ''; box.style.display = btns.length ? '' : 'none';
+  box.classList.toggle('col', btns.length > 2);
+  btns.forEach(([label, cls, fn]) => {
+    const bt = document.createElement('button'); bt.className = 'btn ' + cls; bt.textContent = label; bt.onclick = fn; box.appendChild(bt);
+  });
+  $('modal').classList.add('on');
+}
+function hideModal() { $('modal').classList.remove('on'); }
+function confirmBox(title, text, okLabel, ok, danger) {
+  confirmOpen = true;
+  const close = () => { confirmOpen = false; hideModal(); };
+  showModal(title, text, false, [['取消', 'light', close], [okLabel, danger ? 'red' : '', () => { close(); ok(); }]]);
+}
+
+// ------------------------------------------------------------ segmented controls
+function segSet(id, v) { $(id).querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === (v || ''))); }
+function segGet(id) { const b = $(id).querySelector('button.on'); return b ? b.dataset.v : ''; }
+
+// ------------------------------------------------------------ status actions
+$('wfc').onchange = ev => {
+  const on = ev.target.checked;
+  ev.target.checked = !on; // the next status poll shows the real state
+  if (on) startWfc(); else stopWfc();
+};
+function startWfc() {
+  if (!S || S.settings.subId === -1) { toast('请先选择 SIM 卡'); return; }
+  const slot = S.settings.simSlot;
+  const go = () => { busy = 'on'; busyAt = Date.now(); service('app.vowifi.START'); setTimeout(poll, 300); };
+  if (slot < 0 || slotBound[slot] === PKG) { go(); return; }
+  // The slot was handed back: take its system IMS over again first.
+  confirmBox(`接管卡槽 ${slot + 1} 并开启`, '开启 WiFi 通话需要由本模块提供这张卡的系统 IMS（通话、短信、WLAN 通话开关），手机自带的 VoLTE 在此卡槽上停用。', '开启', async () => {
+    busy = 'on'; busyAt = Date.now();
+    showModal(`正在接管卡槽 ${slot + 1}`, '把这张卡的系统 IMS 交给本模块…', true, []);
+    await applySlot(slot, true);
+    await exec('sleep 2');
+    go();
+  });
+}
+function stopWfc() {
+  const slot = S ? S.settings.simSlot : -1;
+  confirmOpen = true;
+  const close = () => { confirmOpen = false; hideModal(); };
+  showModal('关闭 WiFi 通话', '「仅关闭」保留卡槽接管，之后可在这里或系统设置的 WLAN 通话里重新打开，但关闭期间这张卡的来电接不进来。「恢复原生」同时把卡槽交还手机自带的通话服务，VoLTE 和来电立即恢复。', false, [
+    ['恢复原生', '', async () => {
+      close();
+      // Full restore (stop, 4G/5G, cross-SIM, voice state), then hand the slot back.
+      busy = 'restore';
+      showModal('正在恢复原生通话', '关闭 WiFi 通话并恢复这张卡的设置…', true, []);
+      const id = String(Date.now());
+      await send('restore', id);
+      const deadline = Date.now() + 90000;
+      while (Date.now() < deadline) {
+        await exec('sleep 1');
+        await poll();
+        if (S && S.restore === 'done:' + id) break;
+      }
+      if (slot >= 0) await applySlot(slot, false);
+      busy = null; hideModal(); poll();
+    }],
+    ['仅关闭', 'light', () => { close(); busy = 'off'; busyAt = Date.now(); service('app.vowifi.STOP'); setTimeout(poll, 300); }],
+    ['取消', 'light', close],
+  ]);
+}
+$('restart').onclick = () => confirmBox('重启 WiFi 通话',
+  S && S.inCall ? '将断开并重新建立隧道和 IMS 注册，当前通话会被挂断。' : '将断开并重新建立隧道和 IMS 注册，约需几秒。',
+  '重启', () => { send('restart'); busy = 'on'; busyAt = Date.now(); });
+$('more').onclick = () => { detailsOpen = !detailsOpen; render(); };
+$('sims').onclick = ev => {
+  const el = ev.target.closest('.sim'); if (!el || !S) return;
+  const sub = Number(el.dataset.sub); if (sub === S.settings.subId) return;
+  send('sim', sub); setTimeout(poll, 400);
+};
+$('radio').onchange = ev => {
+  send('radio', ev.target.checked ? '1' : '0');
+  busy = 'radio'; busyAt = Date.now();
+  setTimeout(poll, 400);
+};
+$('net').onclick = ev => { const b = ev.target.closest('button'); if (!b) return; segSet('net', b.dataset.v); send('net', b.dataset.v); };
+$('exitbtn').onclick = () => { send('exitip'); setTimeout(poll, 300); };
+$('autostart').onchange = ev => send('autostart', ev.target.checked ? '1' : '0');
+$('debug').onchange = ev => send('debug', ev.target.checked ? '1' : '0');
+
+// ------------------------------------------------------------ settings
+const FIELDS = ['socks5', 'socksUser', 'socksPass', 'dohServers', 'staticEpdgIp', 'epdg', 'imsDomain', 'pcscf', 'countryCode', 'smsc'];
+const SEGS = ['dnsMode', 'dialScheme', 'secAgree', 'sipTransport'];
+function loadSettings(st) {
+  FIELDS.forEach(k => { $('s-' + k).value = st[k] || ''; });
+  SEGS.forEach(k => segSet('s-' + k, st[k] || (k === 'dnsMode' ? 'system' : '')));
+  $('s-preferIpv6').checked = !!st.preferIpv6;
+  dnsHint();
+  setDirty(false);
+}
+function setDirty(d) { settingsDirty = d; $('save').classList.toggle('on', d); }
+function dnsHint() {
+  const m = segGet('s-dnsMode') || 'system';
+  ['doh', 'static', 'system'].forEach(x => { $('dns-' + x).style.display = x === m ? '' : 'none'; });
+}
+FIELDS.forEach(k => { $('s-' + k).oninput = () => setDirty(true); });
+$('s-preferIpv6').onchange = () => setDirty(true);
+SEGS.forEach(k => { $('s-' + k).onclick = ev => { const b = ev.target.closest('button'); if (!b) return; segSet('s-' + k, b.dataset.v); dnsHint(); setDirty(true); }; });
+$('save').onclick = () => {
+  const o = {};
+  FIELDS.forEach(k => { o[k] = $('s-' + k).value.trim(); });
+  SEGS.forEach(k => { o[k] = segGet('s-' + k); });
+  if (!o.dnsMode) o.dnsMode = 'system';
+  o.preferIpv6 = $('s-preferIpv6').checked;
+  const b64 = btoa(unescape(encodeURIComponent(JSON.stringify(o))));
+  setDirty(false);
+  send('save', b64).then(() => { toast(S && S.engine.phase !== 'idle' ? '已保存，正在重连' : '已保存'); setTimeout(poll, 400); });
+};
+
+// ------------------------------------------------------------ IMS takeover slots
+async function loadSlots() {
+  const r = await exec(`. ${CONF} 2>/dev/null; echo "$SLOTS"; for s in 0 1; do echo "$s=$(cmd phone ims get-ims-service -s $s -c 2>/dev/null)"; done`);
+  const lines = r.stdout.trim().split('\n');
+  const conf = (lines.shift() || '').split(/\s+/).filter(Boolean);
+  const bound = {};
+  lines.forEach(l => { const [s, p] = l.split('='); bound[s] = p; });
+  slotBound = bound;
+  $('slots').innerHTML = [0, 1].map(s => {
+    const ours = bound[s] === PKG;
+    const who = ours ? '当前由本模块提供' : bound[s] ? '当前由手机自带服务提供' : '当前未接管';
+    return `<div class="item"><div class="grow"><div class="t">卡槽 ${s + 1}</div><div class="s">${who}</div></div>
+      <label class="switch"><input type="checkbox" data-slot="${s}" ${conf.includes(String(s)) ? 'checked' : ''}><span></span></label></div>`;
+  }).join('');
+  $('slots').querySelectorAll('input').forEach(i => i.onchange = () => setSlot(Number(i.dataset.slot), i.checked));
+}
+function setSlot(slot, on) {
+  const verb = on ? '接管' : '交还';
+  loadSlots(); // keep the switch as it was until confirmed
+  confirmBox(`${verb}卡槽 ${slot + 1}`, on
+    ? '这张卡的系统 IMS（通话、短信、WLAN 通话开关）改由本模块提供，手机自带的 VoLTE 在此卡槽上停用。'
+    : '这张卡的系统 IMS 恢复由手机自带服务提供，本模块不再处理它的通话和短信。', verb, async () => {
+    await applySlot(slot, on);
+    toast(`已${verb}卡槽 ${slot + 1}`);
+  }, !on);
+}
+/** Takes a slot's system IMS over (on) or hands it back, and records it in ims.conf for boot. */
+async function applySlot(slot, on) {
+  const r = await exec(`. ${CONF} 2>/dev/null; echo "$SLOTS"`);
+  const slots = r.stdout.trim().split(/\s+/).filter(Boolean).filter(x => x !== String(slot));
+  if (on) slots.push(String(slot));
+  slots.sort();
+  const cmd = on
+    ? `cmd phone ims clear-ims-service-override -s ${slot}; sleep 2; cmd phone ims set-ims-service -s ${slot} -c -f 0,1 ${PKG}`
+    : `cmd phone ims clear-ims-service-override -s ${slot}`;
+  await exec(`mkdir -p /data/adb/vowifi && echo 'SLOTS="${slots.join(' ')}"' > ${CONF}; ${cmd} >/dev/null 2>&1`);
+  await loadSlots();
+}
+
+// ------------------------------------------------------------ restore / uninstall
+async function restoreAll(uninstall) {
+  busy = 'restore';
+  showModal('正在恢复原生通话', '关闭 WiFi 通话并恢复网络设置，最长约 1 分钟…', true, []);
+  const id = String(Date.now());
+  await send('restore', id);
+  const deadline = Date.now() + 90000;
+  while (Date.now() < deadline) {
+    await exec('sleep 1');
+    await poll();
+    if (S && S.restore === 'done:' + id) break;
+  }
+  showModal('正在恢复原生通话', '把卡槽交还手机自带的通话服务…', true, []);
+  await exec(`mkdir -p /data/adb/vowifi && echo 'SLOTS=""' > ${CONF}; for s in 0 1; do cmd phone ims clear-ims-service-override -s $s; done >/dev/null 2>&1`);
+  if (uninstall) await exec(`touch ${MODDIR}/remove; pm uninstall ${PKG} >/dev/null 2>&1`);
+  await loadSlots();
+  busy = null;
+  confirmOpen = true;
+  showModal(uninstall ? '已恢复，重启后完成卸载' : '已恢复手机原生通话',
+    uninstall ? '通话、短信和 VoLTE 已交还手机自带服务，后台服务已删除。请重启手机完成模块卸载。'
+      : '通话、短信和 VoLTE 已交还手机自带服务。之后打开 WiFi 通话开关会重新接管所选卡槽。', false,
+    [['好', '', () => { confirmOpen = false; hideModal(); }]]);
+}
+$('restoreBtn').onclick = () => confirmBox('恢复手机原生通话',
+  '将关闭 WiFi 通话、恢复这张卡的 4G/5G 与跨卡通话设置，并把所有卡槽交还手机自带的通话服务。', '恢复', () => restoreAll(false));
+$('uninstallBtn').onclick = () => confirmBox('恢复原生并卸载模块',
+  '先恢复手机原生通话，再删除后台服务并卸载本模块。完成后需要重启手机。', '卸载', () => restoreAll(true), true);
+
+// ------------------------------------------------------------ logs
+let logLines = [];
+async function loadLogs() {
+  const r = await exec(`tail -n 800 ${LOG} 2>/dev/null`);
+  logLines = r.stdout.split('\n').filter(Boolean).reverse().map(l => {
+    const [t, lv, ...rest] = l.split('\t');
+    const d = new Date(Number(t));
+    return { ts: isNaN(d) ? '' : d.toTimeString().slice(0, 8),
+      c: lv === 'WARN' ? 'W' : lv === 'ERROR' ? 'E' : lv === 'DEBUG' ? 'D' : 'I', msg: rest.join('\t') };
+  });
+  renderLogs();
+}
+function renderLogs() {
+  const f = segGet('logfilter');
+  const rows = logLines.filter(l => !f || l.c === f || (f === 'I' && l.c === 'D'));
+  const box = $('log');
+  box.classList.toggle('faint', !rows.length);
+  box.innerHTML = rows.length ? rows.map(l => `<div class="${l.c}"><b>${l.ts}</b>${esc(l.msg)}</div>`).join('') : '没有日志';
+}
+$('logfilter').onclick = ev => { const b = ev.target.closest('button'); if (!b) return; segSet('logfilter', b.dataset.v); renderLogs(); };
+$('logrefresh').onclick = loadLogs;
+$('logclear').onclick = () => confirmBox('清空日志', '删除 App 保存的全部日志，不可恢复。', '清空',
+  () => { send('clearlogs').then(() => setTimeout(loadLogs, 400)); }, true);
+
+// ------------------------------------------------------------ tabs & loop
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('.page').forEach(p => p.classList.toggle('on', p.id === 'page-' + b.dataset.p));
+  settingsShown = b.dataset.p === 'settings';
+  if (b.dataset.p === 'logs') loadLogs();
+  $('main').scrollTo(0, 0);
+});
+
+(async function main() {
+  await send('refresh');
+  setTimeout(() => send('exitip'), 600);
+  loadSlots();
+  await poll();
+  setInterval(() => { if (!document.hidden) poll(); }, 1000);
+})();
+</script>
+</body>
+</html>

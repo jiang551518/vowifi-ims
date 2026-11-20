@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <application
+        android:name=".VoWiFiApp"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.VoWiFi">
+
+        <!-- No activity: the app is a background system IMS service. Its UI is the
+             module's KernelSU WebUI (module/webroot), which reads files/webui/status.json
+             through root and sends commands here. Only root/system may send them. -->
+        <receiver
+            android:name=".control.ControlReceiver"
+            android:exported="true"
+            android:permission="android.permission.MODIFY_PHONE_STATE">
+            <intent-filter>
+                <action android:name="app.vowifi.CONTROL" />
+            </intent-filter>
+        </receiver>
+
+        <!-- System IMS service (MMTEL over WiFi). Telephony binds it for the SIM slot whose
+             ImsService is overridden to this package; needs the app installed as a system app. -->
+        <service
+            android:name="app.vowifi.ims.VoWifiImsService"
+            android:exported="true"
+            android:permission="android.permission.BIND_IMS_SERVICE">
+            <intent-filter>
+                <action android:name="android.telephony.ims.ImsService" />
+            </intent-filter>
+            <meta-data android:name="android.telephony.ims.MMTEL_FEATURE" android:value="true" />
+        </service>
+        <service
+            android:name=".service.VoWiFiService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse|microphone">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps the IMS (WiFi Calling) registration alive for the system phone and SMS apps" />
+        </service>
+
+        <receiver
+            android:name=".service.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>
