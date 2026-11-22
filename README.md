@@ -21,8 +21,15 @@ core/      Go 协议核心：IKEv2 + EAP-AKA/AKA'、用户态 ESP、gVisor 网�
 android/   app：无界面的系统组件（前台服务、通话音频、RootHelper、WebUI 桥）
            imsservice：系统 ImsService（MMTEL + 短信）
 module/    KernelSU / Magisk 模块脚本和 WebUI（webroot/index.html）
+docs/      适配其他机型（PORTING.md）、踩坑记录（LESSONS.md）
 tools/     构建与调试脚本
 ```
+
+## 文档
+
+- [module/README.md](module/README.md)：工作原理、出口网络与代理、恢复与卸载、Magisk 用法。
+- [docs/PORTING.md](docs/PORTING.md)：适配其他机型时哪些部分无需修改、哪些要逐项检查，以及验证顺序。
+- [docs/LESSONS.md](docs/LESSONS.md)：开发中遇到的问题、根因和处理方式。
 
 ## 构建
 
