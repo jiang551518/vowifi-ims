@@ -6,6 +6,13 @@
 
 > ⚠ 目前仅在 realme RMX6699（Android 16 / ColorOS / 骁龙，KernelSU）上验证可用。其他机型、系统和 root 方案均未测试，请自行评估风险。紧急呼叫始终走手机原生通道。
 
+## 安装
+
+1. 从 [Releases](https://github.com/jiang551518/vowifi-ims/releases) 下载 `vowifi-ims-vX.Y.Z.zip`。
+2. **KernelSU / APatch**：在管理器的「模块」里安装后重启。**Magisk**（v28+，未实测）：在 Magisk App 里安装后重启，并到「超级用户」确认已给「WiFi 通话」授权，详见 [module/README.md 第 9 节](module/README.md#9-在-magisk-上使用)。
+3. 在 设置 → 移动网络 → 卡信息 打开要用的 SIM 的「WLAN 通话」，模块即接管这张卡并连接；关闭即恢复原生通话。
+4. KernelSU 中点本模块可打开管理界面（Magisk 需另装 KsuWebUI / MMRL / WebUI X）。代理目前只适配 [NetProxy](https://github.com/Fanju6/NetProxy-Magisk)。
+
 ## 目录
 
 ```

@@ -170,7 +170,7 @@ WebUI 的「测试功能」里还保留了「开启时将此卡切换为 2G」�
 
 ## 7. 管理界面（WebUI）
 
-App 没有界面，整个管理界面就是 `webroot/index.html`，运行在 KernelSU 的 WebUI 里（Magisk 可用 KsuWebUI / MMRL）：
+App 没有界面，整个管理界面就是 `webroot/index.html`，运行在 KernelSU 的 WebUI 里（Magisk 用户见第 9 节）：
 
 - **读状态**：App 把引擎状态、SIM 列表、设置、出口 IP 等写入 `/data/data/app.vowifi/files/webui/status.json`（变化后约 250 ms 原子替换）。WebUI 每秒用 root 读取一次。
 - **发命令**：WebUI 通过
@@ -193,7 +193,36 @@ App 没有界面，整个管理界面就是 `webroot/index.html`，运行在 Ker
 
 所有接管都不持久，即使模块失效，重启后系统也会回到自带的 IMS。
 
-## 9. 已知限制
+## 9. 在 Magisk 上使用
+
+模块按 Magisk 标准格式打包（`META-INF`、`customize.sh`、`service.sh`、`uninstall.sh`、`system/` 叠加），Magisk、KernelSU、APatch 都能刷。开发和测试都在 KernelSU 上进行，**Magisk 未实测**，以下是按两者的差异整理的注意事项。
+
+**安装**
+1. 需要 Magisk v28 或更新版本（模块管理器里的「操作」按钮依赖 `action.sh`，v28 起支持）。
+2. 在 **Magisk App → 模块 → 从本地安装** 里刷入 zip。不要在 Recovery 里刷：安装脚本要在系统运行时清理安装缓存、移除旧版 App，并把 App 从分身等其他用户里删除。
+3. 重启手机。
+
+**授予 root**
+
+App 没有界面，第一次请求 root 时 Magisk 弹出的授权框容易错过或被自动拒绝。重启后进入 **Magisk → 超级用户**，确认「WiFi 通话」（`app.vowifi`）已允许；若被拒绝，打开开关后再重启一次。没有 root，模块无法读取 SIM、无法接管系统 IMS。
+
+**使用**
+
+- **总开关**：和 KernelSU 下一样，就是 设置 → 移动网络 → 卡信息 里所选 SIM 的「WLAN 通话」，不依赖任何管理界面。
+- **管理界面**：Magisk 本身不能打开模块 WebUI，需要另装一个支持 KernelSU WebUI 接口（`ksu.exec`）的应用来打开 `webroot/index.html`，例如 [KsuWebUI](https://github.com/5ec1cff/KsuWebUIStandalone)、[MMRL](https://github.com/MMRLApp/MMRL) 或 [WebUI X](https://github.com/MMRLApp/WebUI-X-Portable)，并给它 root。不装也能用，只是看不到状态页、日志和高级设置。
+- **状态摘要**：Magisk 模块列表里本模块的「操作」按钮会打印当前状态（是否接管、注册情况等）。
+
+**卸载**
+
+在 Magisk 模块列表里删除本模块并重启即可。卸载脚本会在开机后交还卡槽、让 App 撤销自己的系统改动，再删除 App 和 `/data/adb/vowifi`。
+
+**可能遇到的问题**
+
+- 升级模块后仍是旧版行为：先在 Magisk 里确认模块已更新，再重启一次。仍不行时，删除 `/data/system/package_cache/` 后重启，让系统重新读取模块里的 APK。
+- 开机后一直不接管：多半是 root 没授权（见上），或系统里这张卡的「WLAN 通话」没打开。
+- 遇到问题时，把 `/data/data/app.vowifi/files/logs/app.log` 和模块版本一起提交 Issue。
+
+## 10. 已知限制
 
 - 是否允许接入由运营商决定。部分运营商按接入地拒绝：Globe 在菲律宾以外回 403，EE 从国内直连回 9003 时需要走代理。也有的卡本身没开通 VoWiFi（如香港联通测试卡）。
 - 部分卡有账户限制（如 CTExcel 不能发短信、不能打国际号码），用原生拨号同样失败，不是模块问题。
@@ -202,7 +231,7 @@ App 没有界面，整个管理界面就是 `webroot/index.html`，运行在 Ker
 - 不支持视频通话、通话保持、多方通话、RTT。
 - 紧急呼叫始终走手机原生通道。
 
-## 10. 标准与声明
+## 11. 标准与声明
 
 协议实现依据公开标准独立编写：
 
