@@ -230,19 +230,15 @@ textarea { resize: vertical; min-height: 66px; }
   <div id="cells"><div class="card pad faint small">读取中…</div></div>
   <div class="foot">首选网络类型由系统设置管理，点卡片进入系统设置修改，这里同步显示。</div>
 
-  <div class="sect">与 4G 共存</div>
+  <div class="sect">实验性功能</div>
   <div class="card">
     <div class="item">
       <div class="grow"><div class="t">开关 WiFi 通话时同步开关高清通话</div>
         <div class="s">打开 WiFi 通话时自动关闭此卡的高清通话，来电改走 WiFi 通话，4G 信号和上网不受影响；关闭 WiFi 通话时自动恢复。只恢复由模块关闭的高清通话。这张卡同时作上网卡时请勿开启（部分漫游网络会因此拒绝 4G 注册）。</div></div>
       <label class="switch"><input id="volte" type="checkbox"><span></span></label>
     </div>
-  </div>
-
-  <div class="sect">测试功能（慎用）</div>
-  <div class="card">
     <div class="item">
-      <div class="grow"><div class="t">开启时将此卡切换为 2G <span class="tag">实验</span></div>
+      <div class="grow"><div class="t">开启时将此卡切换为 2G</div>
         <div class="s">WiFi 通话运行期间，用系统设置里看不到的另一套限制把这张卡锁在 2G，让手机自带的 VoLTE 下线，避免它与 WiFi 通话同号注册、抢走来电。代价：蜂窝信号明显变差，所在地没有 2G 网络时这张卡会完全无信号；切换要等基带约 1 分钟。关闭 WiFi 通话或此开关后自动恢复。一般用不到，优先用上面的「同步开关高清通话」或系统里的首选网络类型。</div></div>
       <label class="switch"><input id="radio" type="checkbox"><span></span></label>
     </div>

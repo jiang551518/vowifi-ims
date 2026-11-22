@@ -49,7 +49,7 @@
   - 试过手动选网到测试网络 001-01：60 秒后基带报错并重新注册回网络，不可靠。
   - 试过关电台：会把另一张卡一起断电（日志可见 PHONE0 + PHONE1）。
   - 试过只允许 CDMA：基带直接拒绝（error 6）。
-  - 可行：把这张卡限制为 2G（不含 LTE/NR），基带 VoLTE 下线，但 4G 也没了。现在作为「测试功能」保留。
+  - 可行：把这张卡限制为 2G（不含 LTE/NR），基带 VoLTE 下线，但 4G 也没了。现在作为 WebUI「实验性功能」保留。
   - **更好的做法**：在卡槽仍由手机自带 IMS 管理时关掉这张卡的「高清通话」（`setAdvancedCallingSettingEnabled(false)`）。基带撤下 4G 上的语音（`isAvailable(sub, 语音, LTE)` 变为 false），只保留短信 / 补充业务的 IMS 注册，4G 照常；再接管卡槽，来电就走模块（3UK 实测）。必须在交还状态下改：卡槽被接管后，系统把这个开关的变化发给的是本模块，基带收不到。现在是 WebUI 的「同步开关高清通话」选项。
 - **关掉高清通话后整张卡无服务、没流量（CTExcel 作上网卡时）** → 中国电信 4G 以 EMM 原因 14（EPS services not allowed in this PLMN）拒绝 PS 注册，WiFi 通话也因为没有数据、解析不了 ePDG 而失败。恢复高清通话后约 25 秒回到 4G。同卡不作上网卡时、3UK 关掉高清通话都正常。推测漫游网络没有 CSFB，作为上网卡注册 4G 时要求 IMS 语音。→ 文档注明「同步开关高清通话」不要用在上网卡上（暂未在代码里自动跳过）。
 - **切换 eSIM 后原来那张卡的高清通话没恢复** → 对不在用的号码，`setAdvancedCallingSettingEnabled` 会抛 ServiceSpecificException；而且恢复记录只存了一个号码，被新卡覆盖了。→ 每张卡单独记录；对不在用的号码改写 SIM 数据库（`ISub.setSubscriptionProperty(sub, "volte_vt_enabled", "1")`）。
