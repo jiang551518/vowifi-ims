@@ -86,7 +86,10 @@ object Core {
         private set
     lateinit var logStore: LogStore
         private set
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    /** Errors in background coroutines are logged instead of crashing the (persistent) process. */
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + kotlinx.coroutines.CoroutineExceptionHandler { ctx, e ->
+        appendLog("ERROR", "后台任务异常（${ctx[kotlinx.coroutines.CoroutineName]?.name ?: "协程"}）：${android.util.Log.getStackTraceString(e)}")
+    })
 
     private val _status = MutableStateFlow(EngineStatus())
     val status: StateFlow<EngineStatus> = _status
@@ -132,6 +135,10 @@ object Core {
             logStore.appendNow(LogLine(System.currentTimeMillis(), "ERROR",
                 "崩溃（线程 ${t.name}）：${android.util.Log.getStackTraceString(e)}"))
             prevHandler?.uncaughtException(t, e)
+        }
+        runCatching {
+            val pi = application.packageManager.getPackageInfo(application.packageName, 0)
+            appendLog("INFO", "App 启动：v${pi.versionName}（进程 ${android.os.Process.myPid()}）")
         }
         Thread {
             val r = SysLogCapture.ensureRunning(logStore.directory)

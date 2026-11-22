@@ -17,6 +17,10 @@ class ControlReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val cmd = intent.getStringExtra("cmd") ?: return
         val arg = intent.getStringExtra("arg").orEmpty()
+        if (cmd != "refresh" && cmd != "cell" && cmd != "exitip") {
+            // Every WebUI action is logged (the settings payload is summarized).
+            Core.appendLog("INFO", "WebUI 命令：$cmd${if (arg.isEmpty()) "" else if (cmd == "save") "（设置）" else " $arg"}")
+        }
         val result = runCatching {
             when (cmd) {
                 "refresh" -> { Core.refreshSims(); WebBridge.touch() }
@@ -28,6 +32,7 @@ class ControlReceiver : BroadcastReceiver() {
                 "exitip" -> WebBridge.checkExitIp()
                 "radio" -> WebBridge.setRadioOff(arg == "1" || arg == "true")
                 "cell" -> WebBridge.refreshCell()
+                "volte" -> app.vowifi.WfcSync.setVolteSync(arg == "1" || arg == "true")
                 "autostart" -> WebBridge.setAutoStart(arg == "1" || arg == "true")
                 "debug" -> WebBridge.setDebugLog(arg == "1" || arg == "true")
                 "save" -> WebBridge.saveSettings(JSONObject(String(Base64.decode(arg, Base64.DEFAULT))))

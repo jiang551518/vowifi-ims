@@ -6,6 +6,15 @@
 # and /data/adb/vowifi. Telephony is not up yet here, so that part runs in the
 # background once boot has completed.
 CONF=/data/adb/vowifi/ims.conf
+MTAG=uninstall
+# Module log (same format as the app log: epoch ms, level, message), shown in the WebUI.
+MLOG=/data/adb/vowifi/module.log
+mlog() {
+  mkdir -p /data/adb/vowifi
+  [ -f "$MLOG" ] && [ "$(wc -c < "$MLOG")" -gt 524288 ] && mv -f "$MLOG" "$MLOG.1"
+  printf '%s000\t%s\t[%s] %s\n' "$(date +%s)" "$1" "$MTAG" "$2" >> "$MLOG"
+}
+mlog INFO "模块已删除，开始交还卡槽并清理"
 SLOTS=""
 [ -f "$CONF" ] && . "$CONF"
 for s in $SLOTS; do
@@ -25,6 +34,7 @@ done
       grep -q '"restore":"done:uninstall"' /data/data/app.vowifi/files/webui/status.json 2>/dev/null && break
       sleep 3; i=$((i + 1))
     done
+    mlog INFO "App 已撤销系统改动，正在卸载 App"
     pm uninstall app.vowifi >/dev/null 2>&1
   fi
   rm -rf /data/adb/vowifi

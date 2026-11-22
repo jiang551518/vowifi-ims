@@ -69,6 +69,18 @@ class Settings(context: Context) {
     var autoStart: Boolean
         get() = p.getBoolean("autoStart", false)
         set(v) = p.edit().putBoolean("autoStart", v).apply()
+    /** Turn the SIM's "HD calling" (VoLTE) off while the module serves it, back on after. */
+    var syncVolte: Boolean
+        get() = p.getBoolean("syncVolte", false)
+        set(v) = p.edit().putBoolean("syncVolte", v).apply()
+    /** subIds whose "HD calling" this app turned off and must turn back on. */
+    var volteRestoreSubs: Set<Int>
+        get() {
+            val set = p.getStringSet("volteRestoreSubs", emptySet())!!.mapNotNull { it.toIntOrNull() }.toMutableSet()
+            p.getInt("volteRestoreSub", -1).takeIf { it > 0 }?.let { set += it } // older single-value record
+            return set
+        }
+        set(v) = p.edit().putStringSet("volteRestoreSubs", v.map { it.toString() }.toSet()).remove("volteRestoreSub").apply()
     /** "Restore native calling" from the WebUI: the system switch no longer drives the module. */
     var paused: Boolean
         get() = p.getBoolean("paused", false)

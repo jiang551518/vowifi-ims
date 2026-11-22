@@ -986,18 +986,31 @@ func (e *Engine) CellInfoJSON(slot, subID int) (string, error) {
 	return resp.Result, err
 }
 
+// VolteSetting returns the SIM's system "HD calling" (VoLTE) switch.
+func (e *Engine) VolteSetting(subID int) (bool, error) {
+	return e.boolSetting("volte", map[string]any{"subId": subID})
+}
+
+// SetVolteSetting sets the SIM's system "HD calling" (VoLTE) switch and
+// returns its previous value.
+func (e *Engine) SetVolteSetting(subID int, on bool) (bool, error) {
+	return e.boolSetting("volte", map[string]any{"subId": subID, "on": on})
+}
+
 // WifiCallingSetting returns the SIM's system "WLAN calling" switch.
 func (e *Engine) WifiCallingSetting(subID int) (bool, error) {
-	return e.wfcSetting(map[string]any{"subId": subID})
+	return e.boolSetting("wfc", map[string]any{"subId": subID})
 }
 
 // SetWifiCallingSetting sets the SIM's system "WLAN calling" switch and
 // returns its previous value.
 func (e *Engine) SetWifiCallingSetting(subID int, on bool) (bool, error) {
-	return e.wfcSetting(map[string]any{"subId": subID, "on": on})
+	return e.boolSetting("wfc", map[string]any{"subId": subID, "on": on})
 }
 
-func (e *Engine) wfcSetting(req map[string]any) (bool, error) {
+// boolSetting reads (and with "on", sets) a per-SIM boolean system setting
+// through the root helper op; it returns the value before any change.
+func (e *Engine) boolSetting(op string, req map[string]any) (bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	h, err := e.getHelper(ctx)
@@ -1007,7 +1020,7 @@ func (e *Engine) wfcSetting(req map[string]any) (bool, error) {
 	var resp struct {
 		Result string `json:"result"`
 	}
-	err = h.Call(ctx, "wfc", req, &resp)
+	err = h.Call(ctx, op, req, &resp)
 	return resp.Result == "true", err
 }
 

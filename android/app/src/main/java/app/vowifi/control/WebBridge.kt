@@ -72,6 +72,7 @@ object WebBridge {
         o.put("settings", JSONObject()
             .put("subId", s.subId).put("simSlot", s.simSlot).put("enabled", s.enabled)
             .put("networkMode", s.networkMode).put("radioOffWhileOn", s.radioOffWhileOn)
+            .put("syncVolte", s.syncVolte)
             .put("autoStart", s.autoStart).put("debugLog", s.debugLog).put("preferIpv6", s.preferIpv6)
             .put("socks5", s.socks5).put("socksUser", s.socksUser).put("socksPass", if (s.socksPass.isEmpty()) "" else "******")
             .put("dnsMode", s.dnsMode).put("dohServers", s.dohServers).put("staticEpdgIp", s.staticEpdgIp)

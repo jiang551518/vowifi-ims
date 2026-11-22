@@ -281,6 +281,31 @@ public final class RootHelper {
                 resp.put("result", String.valueOf(before));
                 break;
             }
+            case "volte": {
+                // The per-SIM system "HD calling" (VoLTE / enhanced 4G) switch. Only the
+                // phone's own IMS service passes it on to the modem, so it is changed
+                // while the slot still belongs to it. Returns the value before "on".
+                // A SIM that is not active (e.g. another eSIM profile was switched to)
+                // is rejected by these calls: fall back to its subscription record.
+                int sub = req.getInt("subId");
+                Object before;
+                try {
+                    before = call(phone(), "isAdvancedCallingSettingEnabled", new Object[]{sub});
+                } catch (Exception e) {
+                    Object v = call(isub(), "getSubscriptionProperty", new Object[]{sub, "volte_vt_enabled", "android", null});
+                    before = !"0".equals(String.valueOf(v));
+                }
+                if (req.has("on")) {
+                    boolean on = req.getBoolean("on");
+                    try {
+                        call(phone(), "setAdvancedCallingSettingEnabled", new Object[]{sub, on});
+                    } catch (Exception e) {
+                        call(isub(), "setSubscriptionProperty", new Object[]{sub, "volte_vt_enabled", on ? "1" : "0"});
+                    }
+                }
+                resp.put("result", String.valueOf(before));
+                break;
+            }
             case "invoke": {
                 // Debug: call an arbitrary method on a telephony interface.
                 String svc = req.getString("service");

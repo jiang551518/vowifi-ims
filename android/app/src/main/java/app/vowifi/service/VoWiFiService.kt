@@ -74,6 +74,7 @@ class VoWiFiService : LifecycleService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
+        Core.appendLog("DEBUG", "前台服务：${intent?.action ?: "系统重启服务"}")
         when (intent?.action) {
             ACTION_SWITCH_OFF -> {
                 // Notification button: turn the system switch off (stops and hands the slot back).

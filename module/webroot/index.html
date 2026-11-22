@@ -230,11 +230,20 @@ textarea { resize: vertical; min-height: 66px; }
   <div id="cells"><div class="card pad faint small">读取中…</div></div>
   <div class="foot">首选网络类型由系统设置管理，点卡片进入系统设置修改，这里同步显示。</div>
 
+  <div class="sect">与 4G 共存</div>
+  <div class="card">
+    <div class="item">
+      <div class="grow"><div class="t">开关 WiFi 通话时同步开关高清通话</div>
+        <div class="s">打开 WiFi 通话时自动关闭此卡的高清通话，来电改走 WiFi 通话，4G 信号和上网不受影响；关闭 WiFi 通话时自动恢复。只恢复由模块关闭的高清通话。这张卡同时作上网卡时请勿开启（部分漫游网络会因此拒绝 4G 注册）。</div></div>
+      <label class="switch"><input id="volte" type="checkbox"><span></span></label>
+    </div>
+  </div>
+
   <div class="sect">测试功能（慎用）</div>
   <div class="card">
     <div class="item">
       <div class="grow"><div class="t">开启时将此卡切换为 2G <span class="tag">实验</span></div>
-        <div class="s">WiFi 通话运行期间，用系统设置里看不到的另一套限制把这张卡锁在 2G，让手机自带的 VoLTE 下线，避免它与 WiFi 通话同号注册、抢走来电。代价：蜂窝信号明显变差，所在地没有 2G 网络时这张卡会完全无信号；切换要等基带约 1 分钟。关闭 WiFi 通话或此开关后自动恢复。一般用不到，优先用上面的「首选网络类型」。</div></div>
+        <div class="s">WiFi 通话运行期间，用系统设置里看不到的另一套限制把这张卡锁在 2G，让手机自带的 VoLTE 下线，避免它与 WiFi 通话同号注册、抢走来电。代价：蜂窝信号明显变差，所在地没有 2G 网络时这张卡会完全无信号；切换要等基带约 1 分钟。关闭 WiFi 通话或此开关后自动恢复。一般用不到，优先用上面的「同步开关高清通话」或系统里的首选网络类型。</div></div>
       <label class="switch"><input id="radio" type="checkbox"><span></span></label>
     </div>
   </div>
@@ -355,6 +364,7 @@ const DATA = '/data/data/' + PKG + '/files';
 const STATUS = DATA + '/webui/status.json';
 const LOG = DATA + '/logs/app.log';
 const CONF = '/data/adb/vowifi/ims.conf';
+const MLOG = '/data/adb/vowifi/module.log'; // module scripts + WebUI actions (same format as the app log)
 const MODDIR = '/data/adb/modules/vowifi_ims';
 const STEPS = [['resolve', '解析'], ['ike', 'IKE'], ['auth', '认证'], ['tunnel', '隧道'], ['ims', 'IMS'], ['ready', '就绪']];
 const $ = id => document.getElementById(id);
@@ -373,6 +383,13 @@ function exec(cmd) {
 }
 function toast(msg) { try { ksu.toast(msg); } catch (e) { console.log(msg); } }
 const q = s => "'" + String(s).replace(/'/g, "'\\''") + "'";
+/** Appends a line to the module log (shown together with the app log on the log page). */
+function mlog(level, msg) {
+  return exec(`mkdir -p /data/adb/vowifi; printf '%s000\\t%s\\t%s\\n' "$(date +%s)" ${q(level)} ${q('[WebUI] ' + msg)} >> ${MLOG}`);
+}
+// Global capture: script errors in the WebUI end up in the module log.
+window.addEventListener('error', e => { mlog('ERROR', `页面错误：${e.message}（第 ${e.lineno} 行）`); });
+window.addEventListener('unhandledrejection', e => { mlog('ERROR', `页面异步错误：${e.reason}`); });
 function send(cmd, arg) {
   return exec('am broadcast -n ' + PKG + '/.control.ControlReceiver -a app.vowifi.CONTROL --es cmd ' + q(cmd) +
     (arg !== undefined ? ' --es arg ' + q(arg) : '') + ' >/dev/null 2>&1');
@@ -482,6 +499,7 @@ function render() {
   }).join('') : '<div class="card pad faint small">正在读取 SIM…</div>';
 
   $('radio').checked = st.radioOffWhileOn;
+  $('volte').checked = !!st.syncVolte;
   renderCells();
   segSet('net', st.networkMode);
   $('exitip').textContent = S.exitChecking ? '检测中…' : (S.exitIp || '—');
@@ -570,6 +588,7 @@ $('radio').onchange = ev => {
     '· 关闭 WiFi 通话或关掉此开关后自动恢复\n\n一般不需要开启，优先在系统设置里修改首选网络类型。', '仍要开启',
     () => { ev.target.checked = true; apply(); }, true);
 };
+$('volte').onchange = ev => { send('volte', ev.target.checked ? '1' : '0'); setTimeout(poll, 400); };
 $('net').onclick = ev => { const b = ev.target.closest('button'); if (!b) return; segSet('net', b.dataset.v); send('net', b.dataset.v); };
 function modeName(m) {
   if (m === null || m === undefined) return '—';
@@ -593,6 +612,7 @@ function renderCells() {
 $('cells').onclick = ev => {
   const el = ev.target.closest('[data-sub]'); if (!el) return;
   // The network type belongs to the system: open that SIM's own settings page.
+  mlog('INFO', `打开系统 SIM 设置（subId ${el.dataset.sub}）`);
   exec(`am start -a android.settings.NETWORK_OPERATOR_SETTINGS --ei android.provider.extra.SUB_ID ${el.dataset.sub} >/dev/null 2>&1 || am start -a android.settings.WIRELESS_SETTINGS >/dev/null 2>&1`);
 };
 $('exitbtn').onclick = () => { send('exitip'); setTimeout(poll, 300); };
@@ -646,6 +666,7 @@ async function loadSlots() {
 
 // ------------------------------------------------------------ restore / uninstall
 async function restoreAll(uninstall) {
+  mlog('INFO', uninstall ? '恢复原生并卸载模块：开始' : '恢复手机原生通话：开始');
   busy = 'restore';
   showModal('正在恢复原生通话', '关闭 WiFi 通话并恢复网络设置，最长约 1 分钟…', true, []);
   const id = String(Date.now());
@@ -658,7 +679,11 @@ async function restoreAll(uninstall) {
   }
   showModal('正在恢复原生通话', '把卡槽交还手机自带的通话服务…', true, []);
   await exec(`mkdir -p /data/adb/vowifi && echo 'SLOTS=""' > ${CONF}; for s in 0 1; do cmd phone ims clear-ims-service-override -s $s; done >/dev/null 2>&1`);
-  if (uninstall) await exec(`touch ${MODDIR}/remove; pm uninstall ${PKG} >/dev/null 2>&1`);
+  mlog('INFO', '已交还全部卡槽（SLOTS 清空）');
+  if (uninstall) {
+    const r = await exec(`touch ${MODDIR}/remove; pm uninstall ${PKG} 2>&1`);
+    mlog(r.errno ? 'WARN' : 'INFO', `模块已标记删除，卸载 App：${(r.stdout || r.stderr || '').trim() || '完成'}`);
+  }
   await loadSlots();
   busy = null;
   confirmOpen = true;
@@ -675,13 +700,16 @@ $('uninstallBtn').onclick = () => confirmBox('恢复原生并卸载模块',
 // ------------------------------------------------------------ logs
 let logLines = [];
 async function loadLogs() {
-  const r = await exec(`tail -n 800 ${LOG} 2>/dev/null`);
-  logLines = r.stdout.split('\n').filter(Boolean).reverse().map(l => {
+  // App log and module log (scripts + WebUI actions), merged by time.
+  const r = await exec(`tail -n 800 ${LOG} 2>/dev/null; echo @@MLOG@@; tail -n 300 ${MLOG} 2>/dev/null`);
+  const [app, mod] = r.stdout.split('@@MLOG@@');
+  const parse = (text, tag) => (text || '').split('\n').filter(Boolean).map(l => {
     const [t, lv, ...rest] = l.split('\t');
-    const d = new Date(Number(t));
-    return { ts: isNaN(d) ? '' : d.toTimeString().slice(0, 8),
-      c: lv === 'WARN' ? 'W' : lv === 'ERROR' ? 'E' : lv === 'DEBUG' ? 'D' : 'I', msg: rest.join('\t') };
+    const n = Number(t), d = new Date(n);
+    return { n: isNaN(n) ? 0 : n, ts: isNaN(d) ? '' : d.toTimeString().slice(0, 8),
+      c: lv === 'WARN' ? 'W' : lv === 'ERROR' ? 'E' : lv === 'DEBUG' ? 'D' : 'I', msg: (tag || '') + rest.join('\t') };
   });
+  logLines = parse(app, '').concat(parse(mod, '')).sort((a, b) => b.n - a.n);
   renderLogs();
 }
 function renderLogs() {
@@ -693,8 +721,8 @@ function renderLogs() {
 }
 $('logfilter').onclick = ev => { const b = ev.target.closest('button'); if (!b) return; segSet('logfilter', b.dataset.v); renderLogs(); };
 $('logrefresh').onclick = loadLogs;
-$('logclear').onclick = () => confirmBox('清空日志', '删除 App 保存的全部日志，不可恢复。', '清空',
-  () => { send('clearlogs').then(() => setTimeout(loadLogs, 400)); }, true);
+$('logclear').onclick = () => confirmBox('清空日志', '删除 App 日志和模块日志，不可恢复。', '清空',
+  () => { exec(`: > ${MLOG}; rm -f ${MLOG}.1`); send('clearlogs').then(() => setTimeout(loadLogs, 400)); }, true);
 
 // ------------------------------------------------------------ tabs & loop
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
@@ -706,6 +734,7 @@ document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
 });
 
 (async function main() {
+  mlog('INFO', '打开管理界面');
   await send('refresh');
   setTimeout(() => send('exitip'), 600);
   await poll();

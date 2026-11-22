@@ -65,6 +65,7 @@
   | 系统 WLAN 通话开关 | `phone` | `isVoWiFiSettingEnabled` / `setVoWiFiSettingEnabled` |
   | 语音在服务覆盖 | `phone` | `setVoiceServiceStateOverride` |
   | 跨卡通话设置 | `phone` | `isCrossSimCallingEnabledByUser` / `setCrossSimCallingEnabled` |
+  | 高清通话（VoLTE）开关 | `phone` | `isAdvancedCallingSettingEnabled` / `setAdvancedCallingSettingEnabled` |
   | 网络类型（2G 实验开关） | `phone` | `get/setAllowedNetworkTypesForReason` |
   | 小区信息（WebUI） | `phone` | `getServiceStateForSlot(slot, false, false, pkg, null)`、`getSignalStrength` |
 
@@ -79,7 +80,7 @@ cmd phone ims get-ims-service -s <slot> -c   # 运营商级
 
 - **高通（已验证）**：设备 IMS 是 `org.codeaurora.ims`。必须用 `-f 0,1` 同时接管 EMERGENCY_MMTEL 和 MMTEL：只接管 MMTEL 时，打开系统 WLAN 通话会让高通自己再注册一份 VoWiFi，网络把来电送给它，两边都不响。
 - **联发科 / 三星 Exynos / 谷歌 Tensor（未测试）**：设备 IMS 包名、对 `-f` 功能列表的处理、是否回调 `onFeatureReady()` 都可能不同。本机平台不会自动回调，所以 `VoWifiImsService` 在创建 MMTEL 后主动 `markReady()`，其他平台需确认这样做没有副作用。
-- **基带自带 VoLTE 抢来电**：框架层接管只换掉了系统 IMS 服务，基带仍会经 LTE 的 IMS 承载自己注册 VoLTE。同号双注册时网络通常把来电送给基带，而基带交不到系统，来电方会听到「暂时无法接通」。这在所有平台上都要验证：卡在 4G 时能否收到经本模块的来电。缓解办法是在系统设置里把这张卡的首选网络类型设为不含 4G/5G，或使用 WebUI 的「切换为 2G」实验开关。
+- **基带自带 VoLTE 抢来电**：框架层接管只换掉了系统 IMS 服务，基带仍会经 LTE 的 IMS 承载自己注册 VoLTE。同号双注册时网络通常把来电送给基带，而基带交不到系统，来电方会听到「暂时无法接通」。这在所有平台上都要验证：卡在 4G 时能否收到经本模块的来电。缓解办法：开启 WebUI 的「同步开关高清通话」（接管前在原厂 IMS 下关掉高清通话，基带撤下 4G 语音但保留 4G），或在系统设置里把首选网络类型设为不含 4G/5G。其他平台要验证关掉高清通话后基带是否真的不再接听 4G 来电。还要验证关掉后 4G 注册是否仍被网络接受：实测 CTExcel 漫游在中国电信 4G 上作上网卡时会被拒（EMM 原因 14），这与运营商和拜访网络有关。
 - **紧急呼叫**：本模块不声明紧急通话能力，`shouldProcessCall` 对紧急号码返回 CSFB。换平台后务必确认紧急号码仍走基带。
 
 ### 3.4 ROM（系统界面与 Telephony 定制）

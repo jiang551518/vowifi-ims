@@ -2,6 +2,15 @@
 # Module manager "action" button: prints a short status. The full UI is this
 # module's WebUI (KernelSU: tap the module; Magisk: KsuWebUI / MMRL).
 F=/data/data/app.vowifi/files/webui/status.json
+MTAG=action
+# Module log (same format as the app log: epoch ms, level, message), shown in the WebUI.
+MLOG=/data/adb/vowifi/module.log
+mlog() {
+  mkdir -p /data/adb/vowifi
+  [ -f "$MLOG" ] && [ "$(wc -c < "$MLOG")" -gt 524288 ] && mv -f "$MLOG" "$MLOG.1"
+  printf '%s000\t%s\t[%s] %s\n' "$(date +%s)" "$1" "$MTAG" "$2" >> "$MLOG"
+}
+mlog INFO "模块管理器「操作」按钮"
 am broadcast -n app.vowifi/.control.ControlReceiver -a app.vowifi.CONTROL --es cmd refresh >/dev/null 2>&1
 sleep 1
 val() { grep -o "\"$1\":\"[^\"]*\"" "$F" 2>/dev/null | head -1 | cut -d'"' -f4; }

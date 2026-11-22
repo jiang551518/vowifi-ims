@@ -88,11 +88,25 @@ object WfcSync {
         }
     }
 
-    /** Pauses the module (restore native): the switch no longer drives it until turned on from the WebUI. */
+    /**
+     * Pauses the module (restore native): the switch no longer drives it until
+     * turned on from the WebUI. Blocks until the slot is handed back and HD
+     * calling restored (callers run off the main thread).
+     */
     fun pause() {
         Core.settings.paused = true
-        request("pause", 0)
+        runCatching { exec.submit { runCatching { evaluate() } }.get(60, TimeUnit.SECONDS) }
     }
+
+    /** "Turn HD calling off while WiFi calling is on" (WebUI option). */
+    fun setVolteSync(on: Boolean) {
+        Core.settings.syncVolte = on
+        Core.appendLog("INFO", if (on) "已开启：开关 WiFi 通话时同步开关高清通话" else "已关闭高清通话同步")
+        request("volte-sync", 0)
+    }
+
+    private fun volteOn(sub: Int): Boolean =
+        runCatching { Core.engine.volteSetting(sub.toLong()) }.getOrDefault(false)
 
     private fun waitForBoot() {
         while (prop("sys.boot_completed") != "1") Thread.sleep(3000)
@@ -138,7 +152,7 @@ object WfcSync {
         val switchOn = sub > 0 && Core.engine.wifiCallingSetting(sub.toLong())
         lastSwitch = switchOn
         val want = !s.paused && sub > 0 && slot >= 0 && switchOn
-        val owned = (0..1).filter { takenOver(it) }
+        val owned = (0..1).filter { takenOver(it) }.toMutableList()
 
         // Slots that are ours but not wanted any more (switch off, or another SIM chosen).
         val release = owned.filter { !want || it != slot }
@@ -146,16 +160,46 @@ object WfcSync {
             stopEngine()
             if (release.isNotEmpty()) {
                 Core.restoreNative()
-                release.forEach { root("cmd phone ims clear-ims-service-override -s $it") }
+                release.forEach { rootLogged("cmd phone ims clear-ims-service-override -s $it", "交还卡槽 ${it + 1}") }
                 Core.appendLog("INFO", "已把卡槽 ${release.joinToString { (it + 1).toString() }} 交还系统 IMS（恢复原生通话）")
             }
         }
         if (want) {
+            if (s.syncVolte && volteOn(sub)) {
+                // Only the phone's own IMS service tells the modem: hand the slot back
+                // first if it is ours, switch HD calling off, then take it over again.
+                // The modem keeps an IMS registration without voice (SMS / supplementary
+                // services) and LTE stays up; calls then reach the module.
+                if (slot in owned) {
+                    rootLogged("cmd phone ims clear-ims-service-override -s $slot", "交还卡槽 ${slot + 1}")
+                    owned.remove(slot)
+                    Thread.sleep(3000)
+                }
+                runCatching { Core.engine.setVolteSetting(sub.toLong(), false) }
+                    .onSuccess {
+                        s.volteRestoreSubs = s.volteRestoreSubs + sub
+                        Core.appendLog("INFO", "已关闭此卡的高清通话（基带 VoLTE 下线，4G 保留，来电改走 WiFi 通话）")
+                        Thread.sleep(6000) // let the modem deregister voice before the takeover
+                    }
+                    .onFailure { Core.appendLog("WARN", "关闭高清通话失败：${it.message}") }
+            }
             if (slot !in owned) {
-                root("cmd phone ims set-ims-service -s $slot -c -f 0,1 app.vowifi")
+                rootLogged("cmd phone ims set-ims-service -s $slot -c -f 0,1 app.vowifi", "接管卡槽 ${slot + 1}")
                 Core.appendLog("INFO", "系统 WLAN 通话已开启：卡槽 ${slot + 1} 改由本模块的 IMS 服务接管")
             }
             if (!s.enabled || Core.status.value.phase == "idle") VoWiFiService.start(Core.app)
+        }
+        // HD calling this app switched off goes back on once the module no longer
+        // serves that SIM (the slot is handed back first, so the phone's own IMS
+        // passes it to the modem), or when the sync option is turned off.
+        for (marker in s.volteRestoreSubs) {
+            if (want && marker == sub && s.syncVolte) continue
+            runCatching { Core.engine.setVolteSetting(marker.toLong(), true) }
+                .onSuccess {
+                    s.volteRestoreSubs = s.volteRestoreSubs - marker
+                    Core.appendLog("INFO", "已恢复${if (marker == sub) "此卡" else "号码 subId $marker "}的高清通话")
+                }
+                .onFailure { Core.appendLog("WARN", "恢复高清通话失败（subId $marker），稍后重试：${it.message}") }
         }
         val now = if (want) slot else -1
         if (now != ownedSlot) {
@@ -177,10 +221,21 @@ object WfcSync {
     private fun takenOver(slot: Int): Boolean =
         root("cmd phone ims get-ims-service -s $slot -c").trim() == "app.vowifi"
 
+    /** Runs a state-changing root command and logs it; any output (an error message) is logged too. */
+    private fun rootLogged(cmd: String, what: String): String {
+        val out = root(cmd).trim()
+        val ok = out.isEmpty() || out == "true" // set-ims-service prints "true" on success
+        Core.appendLog(if (ok) "DEBUG" else "WARN", "$what：$cmd${if (out.isEmpty()) "" else " → $out"}")
+        return out
+    }
+
     private fun root(cmd: String): String = runCatching {
         val p = ProcessBuilder("/system/bin/su", "-c", cmd).redirectErrorStream(true).start()
         val out = p.inputStream.bufferedReader().readText()
         p.waitFor(20, TimeUnit.SECONDS)
         out
-    }.getOrDefault("")
+    }.getOrElse {
+        Core.appendLog("ERROR", "root 命令失败（$cmd）：${it.message}")
+        ""
+    }
 }
