@@ -136,15 +136,13 @@ object Core {
         Thread {
             val r = SysLogCapture.ensureRunning(logStore.directory)
             if (r != "running") appendLog(if (r == "started") "INFO" else "WARN", "系统日志捕获：$r")
-            // With the Magisk/KernelSU module installed, slots listed in
-            // /data/adb/vowifi/ims.conf belong to our IMS service. An app update
-            // drops Telephony's binding, so re-apply the takeover if it is missing.
             Thread.sleep(15_000)
-            reapplyImsTakeover()
             clearBrandOverrides()
         }.start()
         ImsHub.setBackend(imsBackend)
         WebBridge.start()
+        // The SIM's system "WLAN calling" switch takes the slot over / hands it back.
+        WfcSync.start()
         // The registration technology follows the exit network (WiFi vs mobile data).
         runCatching {
             app.getSystemService(ConnectivityManager::class.java).registerDefaultNetworkCallback(
@@ -171,10 +169,46 @@ object Core {
         }.getOrDefault(false)
     }
 
-    fun pushImsRegistration() {
-        if (!::settings.isInitialized) return
-        val reg = _status.value.registered
+    /** Registration state as reported to the system (lags behind during a quick reconnect). */
+    @Volatile private var reportedRegistered = false
+    private var deregJob: kotlinx.coroutines.Job? = null
+    /** How long a reconnect may take before the system is told the SIM lost WiFi calling. */
+    private const val DEREGISTER_GRACE_MS = 20_000L
+
+    /**
+     * Reports the IMS registration to the system. A tunnel rebuilt after a
+     * network switch usually registers again within seconds; telling the
+     * system right away makes the status bar flash "no service", so a loss
+     * while the engine is reconnecting is only reported after a grace period.
+     */
+    private val regLock = Any()
+
+    fun pushImsRegistration() = synchronized(regLock) {
+        if (!::settings.isInitialized) return@synchronized
+        val st = _status.value
+        if (st.registered) {
+            deregJob?.cancel()
+            reportRegistration(true)
+            return@synchronized
+        }
+        if (st.phase != "idle" && reportedRegistered) {
+            if (deregJob?.isActive != true) deregJob = scope.launch {
+                kotlinx.coroutines.delay(DEREGISTER_GRACE_MS)
+                if (!_status.value.registered) {
+                    appendLog("INFO", "重连超过 ${DEREGISTER_GRACE_MS / 1000} 秒，向系统报告 WiFi 通话暂不可用")
+                    reportRegistration(false)
+                }
+            }
+            return@synchronized
+        }
+        deregJob?.cancel()
+        reportRegistration(false)
+    }
+
+    private fun reportRegistration(reg: Boolean) = synchronized(regLock) {
+        reportedRegistered = reg
         ImsHub.onRegistration(settings.subId, reg, reg && imsOverCellular())
+        syncVoiceOverride()
     }
 
     /**
@@ -231,20 +265,6 @@ object Core {
         }
     }
 
-    private fun reapplyImsTakeover() {
-        val bound = ImsHub.isActive(settings.subId)
-        val script = ". /data/adb/vowifi/ims.conf 2>/dev/null || exit 0; " +
-            (if (bound) "" else "for s in \$SLOTS; do cmd phone ims clear-ims-service-override -s \$s; sleep 2; " +
-                "cmd phone ims set-ims-service -s \$s -c -f 0,1 app.vowifi >/dev/null; done; ") +
-            "echo \"\$SLOTS\""
-        runCatching {
-            val p = ProcessBuilder("/system/bin/su", "-c", script).redirectErrorStream(true).start()
-            val slots = p.inputStream.bufferedReader().readText().trim()
-            p.waitFor()
-            if (slots.isNotEmpty() && !bound) appendLog("INFO", "已按模块配置重新接管卡槽 ${slots.split(" ").joinToString { (it.toInt() + 1).toString() }} 的系统 IMS")
-        }
-    }
-
     /** System IMS service (ImsService) -> engine. */
     /** subId -> override currently applied (true = voice "in service" over WiFi). */
     private val voiceOverride = java.util.concurrent.ConcurrentHashMap<Int, Boolean>()
@@ -258,7 +278,7 @@ object Core {
      */
     fun syncVoiceOverride() {
         val sub = settings.subId
-        val want = sub > 0 && _status.value.registered && ImsHub.isActive(sub)
+        val want = sub > 0 && reportedRegistered && ImsHub.isActive(sub)
         val desired = HashMap<Int, Boolean>()
         voiceOverride.forEach { (s, on) -> if (on && s != sub) desired[s] = false }
         if (sub > 0 && voiceOverride[sub] != want && (want || voiceOverride[sub] == true || voiceOverride[sub] == null)) desired[sub] = want
@@ -275,31 +295,12 @@ object Core {
 
     private val imsBackend = object : ImsHub.Backend {
         override fun onWifiCallingRequested(slot: Int, subId: Int, enabled: Boolean) {
-            appendLog("INFO", "系统 WiFi 通话开关：卡槽 ${slot + 1} ${if (enabled) "开启" else "关闭"}")
-            if (enabled) {
-                val same = subId < 0 || settings.subId == subId
-                if (subId >= 0) settings.subId = subId
-                settings.simSlot = slot
-                // Already running for this SIM (e.g. the service restored itself after
-                // a restart): a second start would cancel the IKE exchange in flight.
-                if (same && _status.value.phase != "idle") {
-                    appendLog("INFO", "WiFi 通话已在运行，无需重新启动")
-                    return
-                }
-                VoWiFiService.start(app)
-            } else if (settings.simSlot == slot) {
-                // An eSIM profile switch tears the old subscription's MMTEL down and
-                // first disables its capabilities: that is not the user turning WiFi
-                // calling off. Stop only if that subscription is still the live one.
-                scope.launch {
-                    kotlinx.coroutines.delay(4000)
-                    if (subId > 0 && (subId != settings.subId || !ImsHub.isActive(subId))) {
-                        appendLog("INFO", "卡槽 ${slot + 1} 正在切换号码，忽略旧号码的关闭请求")
-                    } else {
-                        VoWiFiService.stop(app)
-                    }
-                }
-            }
+            appendLog("INFO", "系统 WiFi 通话能力：卡槽 ${slot + 1} ${if (enabled) "开启" else "关闭"}")
+            // Telephony only tells the bound IMS service. The SIM's system switch is
+            // what decides (WfcSync); an eSIM profile switch also disables the old
+            // subscription's capabilities first, which must not stop anything.
+            if (enabled && slot == settings.simSlot && subId > 0) settings.subId = subId
+            WfcSync.request("capabilities", 1000)
         }
 
         override fun onSubscriptionReady(slot: Int, subId: Int) {
@@ -559,7 +560,13 @@ object Core {
     }
 
     fun refreshSims(onDone: (String?) -> Unit = {}) {
-        scope.launch(Dispatchers.IO) {
+        scope.launch(Dispatchers.IO) { onDone(refreshSimsBlocking()) }
+    }
+
+    private val simLock = Any()
+
+    /** Re-reads the SIM list; returns an error text or null. */
+    fun refreshSimsBlocking(): String? = synchronized(simLock) {
             try {
                 val arr = JSONArray(engine.subscriptionsJSON())
                 _sims.value = (0 until arr.length()).map {
@@ -577,12 +584,11 @@ object Core {
                     settings.simSlot = it.slot
                 }
                 followSlot()
-                onDone(null)
+                null
             } catch (t: Throwable) {
                 _rootError.value = t.message
-                onDone(t.message)
+                t.message ?: t.javaClass.simpleName
             }
-        }
     }
 
     /** Tears down and rebuilds the tunnel + IMS registration (user-requested restart). */

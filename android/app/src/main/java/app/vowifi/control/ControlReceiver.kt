@@ -27,6 +27,7 @@ class ControlReceiver : BroadcastReceiver() {
                 "net" -> WebBridge.setNetworkMode(arg)
                 "exitip" -> WebBridge.checkExitIp()
                 "radio" -> WebBridge.setRadioOff(arg == "1" || arg == "true")
+                "cell" -> WebBridge.refreshCell()
                 "autostart" -> WebBridge.setAutoStart(arg == "1" || arg == "true")
                 "debug" -> WebBridge.setDebugLog(arg == "1" || arg == "true")
                 "save" -> WebBridge.saveSettings(JSONObject(String(Base64.decode(arg, Base64.DEFAULT))))

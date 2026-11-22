@@ -37,13 +37,13 @@ object Notifications {
     fun service(ctx: Context, st: EngineStatus): Notification {
         val (title, text) = label(st)
         val stop = PendingIntent.getService(ctx, 1,
-            Intent(ctx, VoWiFiService::class.java).setAction(VoWiFiService.ACTION_STOP), PendingIntent.FLAG_IMMUTABLE)
+            Intent(ctx, VoWiFiService::class.java).setAction(VoWiFiService.ACTION_SWITCH_OFF), PendingIntent.FLAG_IMMUTABLE)
         return Notification.Builder(ctx, CH_SERVICE)
             .setSmallIcon(R.drawable.ic_launcher_fg)
             .setContentTitle(title)
             .setContentText(text)
             .setOngoing(true)
-            .addAction(Notification.Action.Builder(null, "停止", stop).build())
+            .addAction(Notification.Action.Builder(null, "关闭 WiFi 通话", stop).build())
             .build()
     }
 
@@ -66,12 +66,9 @@ object Notifications {
 
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        val s = Core.settings
-        // After an app update, resume if it was running; after boot, only when auto-start is on.
-        val resume = when (intent.action) {
-            Intent.ACTION_MY_PACKAGE_REPLACED -> s.enabled
-            else -> s.autoStart && s.enabled
-        }
-        if (resume) VoWiFiService.start(context)
+        // The app process is persistent (started by the system at boot); this
+        // receiver only makes sure it is up after boot or an app update. Whether
+        // WiFi calling runs is decided by the SIM's system WLAN calling switch.
+        app.vowifi.WfcSync.request("boot", 2000, refresh = true)
     }
 }

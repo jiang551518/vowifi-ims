@@ -114,6 +114,8 @@ h1 { font-size: 30px; font-weight: 700; letter-spacing: .2px; margin: 10px 4px 1
 .sim .slot { display: inline-block; font-size: 11px; font-weight: 600; color: var(--dim); background: var(--field); border-radius: 6px; padding: 1px 6px; margin-bottom: 6px; }
 
 /* segmented */
+.tag { display: inline-block; font-size: 11px; font-weight: 600; color: var(--warn); border: 1px solid currentColor;
+  border-radius: 5px; padding: 0 4px; margin-left: 4px; vertical-align: 1px; }
 .seg { display: flex; background: var(--field); border-radius: 9px; padding: 2px; }
 .seg button { flex: 1; border: 0; background: transparent; padding: 7px 4px; border-radius: 7px; font-size: 13px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: background .15s; }
@@ -158,7 +160,7 @@ textarea { resize: vertical; min-height: 66px; }
 .modal.on { display: flex; animation: fade .15s; }
 .dialog { background: var(--card); border-radius: 18px; padding: 22px 20px 16px; width: 100%; max-width: 320px; text-align: center; }
 .dialog .t { font-size: 17px; font-weight: 600; }
-.dialog .x { font-size: 13px; color: var(--dim); margin-top: 6px; line-height: 1.5; }
+.dialog .x { font-size: 13px; color: var(--dim); margin-top: 6px; line-height: 1.5; white-space: pre-line; }
 .dialog .btns { display: flex; gap: 10px; margin-top: 18px; }
 .dialog .btns.col { flex-direction: column; gap: 8px; }
 .spinner { width: 28px; height: 28px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--accent);
@@ -223,10 +225,16 @@ textarea { resize: vertical; min-height: 66px; }
 
   <div class="sect">SIM 卡</div>
   <div id="sims" class="sims"><div class="card pad faint small">正在读取 SIM…</div></div>
-  <div class="card" style="margin-top:10px">
+
+  <div class="sect">蜂窝网络</div>
+  <div id="cells"><div class="card pad faint small">读取中…</div></div>
+  <div class="foot">首选网络类型由系统设置管理，点卡片进入系统设置修改，这里同步显示。</div>
+
+  <div class="sect">测试功能（慎用）</div>
+  <div class="card">
     <div class="item">
-      <div class="grow"><div class="t">开启时将此卡切换为 2G</div>
-        <div class="s">停用这张卡的 4G/5G，让手机自带的 VoLTE 下线，避免与 WiFi 通话同号注册抢走来电。关闭 WiFi 通话或此开关后自动恢复。</div></div>
+      <div class="grow"><div class="t">开启时将此卡切换为 2G <span class="tag">实验</span></div>
+        <div class="s">WiFi 通话运行期间，用系统设置里看不到的另一套限制把这张卡锁在 2G，让手机自带的 VoLTE 下线，避免它与 WiFi 通话同号注册、抢走来电。代价：蜂窝信号明显变差，所在地没有 2G 网络时这张卡会完全无信号；切换要等基带约 1 分钟。关闭 WiFi 通话或此开关后自动恢复。一般用不到，优先用上面的「首选网络类型」。</div></div>
       <label class="switch"><input id="radio" type="checkbox"><span></span></label>
     </div>
   </div>
@@ -243,9 +251,9 @@ textarea { resize: vertical; min-height: 66px; }
   </div>
   <div id="nethint" class="foot"></div>
 
-  <div class="sect">接管系统 IMS 的卡槽</div>
+  <div class="sect">系统 IMS</div>
   <div id="slots" class="card"></div>
-  <div class="foot">选中的卡槽开机后由本模块提供系统 IMS：系统拨号器、短信和设置里的 WLAN 通话都走这里。紧急呼叫始终走手机自带的蜂窝网络。</div>
+  <div class="foot">所选 SIM 卡的系统「WLAN 通话」开关就是总开关：打开时本模块接管这张卡的系统 IMS 并连接，系统拨号器和短信都走这里；关闭时断开并交还手机自带服务，VoLTE 恢复。上方开关与系统开关同步。紧急呼叫始终走手机自带的蜂窝网络。</div>
 </section>
 
 <!-- ============================================================ settings -->
@@ -294,8 +302,6 @@ textarea { resize: vertical; min-height: 66px; }
 
   <div class="sect">运行</div>
   <div class="card">
-    <div class="item"><div class="grow"><div class="t">开机自动启动</div><div class="s">上次开启 WiFi 通话时，开机后自动恢复</div></div>
-      <label class="switch"><input id="autostart" type="checkbox"><span></span></label></div>
     <div class="item"><div class="grow"><div class="t">调试日志</div><div class="s">记录 SIP / IKE 细节</div></div>
       <label class="switch"><input id="debug" type="checkbox"><span></span></label></div>
   </div>
@@ -303,7 +309,7 @@ textarea { resize: vertical; min-height: 66px; }
   <div class="sect">恢复与卸载</div>
   <div class="card">
     <div class="item tap" id="restoreBtn"><div class="grow"><div class="t" style="color:var(--accent)">恢复手机原生通话</div>
-      <div class="s">关闭 WiFi 通话，恢复这张卡的 4G/5G、跨卡通话等设置，并把所有卡槽交还手机自带的通话服务。模块保留，之后打开 WiFi 通话开关即可重新接管。</div></div></div>
+      <div class="s">关闭 WiFi 通话，恢复这张卡的 4G/5G、跨卡通话等设置，并把所有卡槽交还手机自带的通话服务。模块暂停：系统 WLAN 通话开关不再启动它，在状态页重新打开 WiFi 通话即可恢复。</div></div></div>
     <div class="item tap" id="uninstallBtn"><div class="grow"><div class="t" style="color:var(--bad)">恢复原生并卸载模块</div>
       <div class="s">在上一项的基础上删除后台服务并卸载本模块，重启手机后完成。</div></div></div>
   </div>
@@ -371,13 +377,14 @@ function send(cmd, arg) {
   return exec('am broadcast -n ' + PKG + '/.control.ControlReceiver -a app.vowifi.CONTROL --es cmd ' + q(cmd) +
     (arg !== undefined ? ' --es arg ' + q(arg) : '') + ' >/dev/null 2>&1');
 }
-function service(action) {
-  return exec('am start-foreground-service -n ' + PKG + '/.service.VoWiFiService -a ' + action + ' >/dev/null 2>&1');
-}
 
 // ------------------------------------------------------------ state
 let S = null, appAlive = true, busy = null, busyAt = 0, detailsOpen = false, lastNote = '';
-let settingsDirty = false, settingsShown = false, confirmOpen = false, slotBound = {};
+let settingsDirty = false, settingsShown = false, confirmOpen = false, netModes = {};
+// Names of RILConstants network modes (Settings.Global preferred_network_mode<subId>).
+const NET_MODES = [[33, '5G/4G/3G/2G（自动）'], [26, '5G/4G/3G/2G（全网通）'], [24, '5G/4G'], [23, '仅 5G'],
+  [9, '4G/3G/2G（自动）'], [10, '4G/3G/2G（全网通）'], [22, '4G/3G/2G（全网通）'], [12, '4G/3G'], [11, '仅 4G'],
+  [0, '3G/2G（自动）'], [3, '3G/2G（自动）'], [2, '仅 3G'], [1, '仅 2G']];
 
 async function poll() {
   const r = await exec('cat ' + STATUS + ' 2>/dev/null; echo; echo "@@"; pidof ' + PKG + ' >/dev/null && echo alive');
@@ -427,7 +434,8 @@ function render() {
     return;
   }
   banner(S.rootError ? '无法启动 root 辅助进程：' + S.rootError + '。请在 KernelSU 中为「WiFi 通话」授予超级用户权限。'
-    : !appAlive ? 'WiFi 通话服务当前未运行，显示的是上次的状态。' : '');
+    : !appAlive ? 'WiFi 通话服务当前未运行，显示的是上次的状态。'
+    : S.ims.paused ? '模块已暂停（已恢复手机原生通话）：系统 WLAN 通话开关不会启动它，打开下方开关可重新启用。' : '');
 
   const e = S.engine, st = S.settings;
   const running = !!e.phase && e.phase !== 'idle';
@@ -436,7 +444,8 @@ function render() {
   $('name').textContent = sim ? sim.name : (e.carrier || '未选择 SIM 卡');
   $('sub').textContent = [sim ? '卡槽 ' + (sim.slot + 1) : '', plmn ? 'PLMN ' + plmn : '',
     e.carrier && sim && e.carrier !== sim.name ? e.carrier : ''].filter(Boolean).join(' · ') || '—';
-  if (!busy || busy === 'radio') $('wfc').checked = running;
+  // The switch mirrors the SIM's system WLAN calling switch (the module's master switch).
+  if (!busy || busy === 'radio') $('wfc').checked = running || (S.ims.switch === true && !S.ims.paused);
   $('restart').style.display = running ? '' : 'none';
 
   const [line, color, live] = statusLine(e);
@@ -473,6 +482,7 @@ function render() {
   }).join('') : '<div class="card pad faint small">正在读取 SIM…</div>';
 
   $('radio').checked = st.radioOffWhileOn;
+  renderCells();
   segSet('net', st.networkMode);
   $('exitip').textContent = S.exitChecking ? '检测中…' : (S.exitIp || '—');
   $('nethint').textContent = {
@@ -480,7 +490,6 @@ function render() {
     wifi: '强制经 WiFi 直连建立隧道；开着 NetProxy 等透明代理时自动绕过代理。',
     cellular: '强制经移动数据直连建立隧道（即使已连 WiFi）；开着 NetProxy 等透明代理时自动绕过代理。',
   }[st.networkMode] || '';
-  $('autostart').checked = st.autoStart;
   $('debug').checked = st.debugLog;
   if (!settingsDirty && !settingsShown) loadSettings(st);
   if (S.note && S.note !== lastNote) toast(S.note);
@@ -505,6 +514,7 @@ function render() {
 // ------------------------------------------------------------ modal
 function showModal(title, text, spin, btns) {
   $('m-title').textContent = title; $('m-text').textContent = text || '';
+  $('m-text').style.textAlign = (text || '').includes('\n') ? 'left' : '';
   $('m-spin').style.display = spin ? '' : 'none';
   const box = $('m-btns'); box.innerHTML = ''; box.style.display = btns.length ? '' : 'none';
   box.classList.toggle('col', btns.length > 2);
@@ -532,42 +542,13 @@ $('wfc').onchange = ev => {
 };
 function startWfc() {
   if (!S || S.settings.subId === -1) { toast('请先选择 SIM 卡'); return; }
-  const slot = S.settings.simSlot;
-  const go = () => { busy = 'on'; busyAt = Date.now(); service('app.vowifi.START'); setTimeout(poll, 300); };
-  if (slot < 0 || slotBound[slot] === PKG) { go(); return; }
-  // The slot was handed back: take its system IMS over again first.
-  confirmBox(`接管卡槽 ${slot + 1} 并开启`, '开启 WiFi 通话需要由本模块提供这张卡的系统 IMS（通话、短信、WLAN 通话开关），手机自带的 VoLTE 在此卡槽上停用。', '开启', async () => {
-    busy = 'on'; busyAt = Date.now();
-    showModal(`正在接管卡槽 ${slot + 1}`, '把这张卡的系统 IMS 交给本模块…', true, []);
-    await applySlot(slot, true);
-    await exec('sleep 2');
-    go();
-  });
+  // Turns the SIM's system WLAN calling switch on; the app then takes the slot over and connects.
+  busy = 'on'; busyAt = Date.now(); send('start'); setTimeout(poll, 300);
 }
 function stopWfc() {
-  const slot = S ? S.settings.simSlot : -1;
-  confirmOpen = true;
-  const close = () => { confirmOpen = false; hideModal(); };
-  showModal('关闭 WiFi 通话', '「仅关闭」保留卡槽接管，之后可在这里或系统设置的 WLAN 通话里重新打开，但关闭期间这张卡的来电接不进来。「恢复原生」同时把卡槽交还手机自带的通话服务，VoLTE 和来电立即恢复。', false, [
-    ['恢复原生', '', async () => {
-      close();
-      // Full restore (stop, 4G/5G, cross-SIM, voice state), then hand the slot back.
-      busy = 'restore';
-      showModal('正在恢复原生通话', '关闭 WiFi 通话并恢复这张卡的设置…', true, []);
-      const id = String(Date.now());
-      await send('restore', id);
-      const deadline = Date.now() + 90000;
-      while (Date.now() < deadline) {
-        await exec('sleep 1');
-        await poll();
-        if (S && S.restore === 'done:' + id) break;
-      }
-      if (slot >= 0) await applySlot(slot, false);
-      busy = null; hideModal(); poll();
-    }],
-    ['仅关闭', 'light', () => { close(); busy = 'off'; busyAt = Date.now(); service('app.vowifi.STOP'); setTimeout(poll, 300); }],
-    ['取消', 'light', close],
-  ]);
+  confirmBox('关闭 WiFi 通话', '同时关闭这张卡的系统 WLAN 通话开关：断开隧道，把这张卡交还手机自带的通话服务，VoLTE 和来电恢复原生。', '关闭', () => {
+    busy = 'off'; busyAt = Date.now(); send('stop'); setTimeout(poll, 300);
+  });
 }
 $('restart').onclick = () => confirmBox('重启 WiFi 通话',
   S && S.inCall ? '将断开并重新建立隧道和 IMS 注册，当前通话会被挂断。' : '将断开并重新建立隧道和 IMS 注册，约需几秒。',
@@ -576,16 +557,45 @@ $('more').onclick = () => { detailsOpen = !detailsOpen; render(); };
 $('sims').onclick = ev => {
   const el = ev.target.closest('.sim'); if (!el || !S) return;
   const sub = Number(el.dataset.sub); if (sub === S.settings.subId) return;
-  send('sim', sub); setTimeout(poll, 400);
+  send('sim', sub); setTimeout(() => poll().then(loadSlots), 400);
 };
 $('radio').onchange = ev => {
-  send('radio', ev.target.checked ? '1' : '0');
-  busy = 'radio'; busyAt = Date.now();
-  setTimeout(poll, 400);
+  const on = ev.target.checked;
+  const apply = () => { send('radio', on ? '1' : '0'); busy = 'radio'; busyAt = Date.now(); setTimeout(poll, 400); };
+  if (!on) { apply(); return; }
+  // Experimental: confirm before turning it on.
+  ev.target.checked = false;
+  confirmBox('开启实验功能？', '「开启时将此卡切换为 2G」会在 WiFi 通话运行期间，用系统设置里看不到的限制把这张卡锁在 2G。\n\n' +
+    '· 蜂窝信号明显变差；所在地没有 2G 网络时，这张卡会完全没有信号\n· 切换要等基带约 1 分钟\n' +
+    '· 关闭 WiFi 通话或关掉此开关后自动恢复\n\n一般不需要开启，优先在系统设置里修改首选网络类型。', '仍要开启',
+    () => { ev.target.checked = true; apply(); }, true);
 };
 $('net').onclick = ev => { const b = ev.target.closest('button'); if (!b) return; segSet('net', b.dataset.v); send('net', b.dataset.v); };
+function modeName(m) {
+  if (m === null || m === undefined) return '—';
+  const k = NET_MODES.find(x => x[0] === m);
+  return k ? k[1] : `其他（${m}）`;
+}
+function renderCells() {
+  const cells = (S && S.cell) || [];
+  const sims = S ? [...S.sims].sort((a, b) => a.slot - b.slot) : [];
+  if (!sims.length) return;
+  $('cells').innerHTML = sims.map(sim => {
+    const c = cells.find(x => x.subId === sim.subId) || {};
+    const rows = [['首选类型', modeName(netModes[sim.subId])], ['当前网络', c.network || '读取中…'],
+      ['频段', c.band], ['信号', c.signal]].filter(([, v]) => v);
+    return `<div class="card tap" data-sub="${sim.subId}" style="margin-bottom:10px">
+      <div class="item"><div class="grow t">卡槽 ${sim.slot + 1} · ${esc(sim.name)}</div>
+        <svg class="i" style="opacity:.4;transform:rotate(-90deg)"><use href="#i-down"/></svg></div>
+      <div class="kv">${rows.map(([k, v]) => `<div>${k}</div><div>${esc(v)}</div>`).join('')}</div></div>`;
+  }).join('');
+}
+$('cells').onclick = ev => {
+  const el = ev.target.closest('[data-sub]'); if (!el) return;
+  // The network type belongs to the system: open that SIM's own settings page.
+  exec(`am start -a android.settings.NETWORK_OPERATOR_SETTINGS --ei android.provider.extra.SUB_ID ${el.dataset.sub} >/dev/null 2>&1 || am start -a android.settings.WIRELESS_SETTINGS >/dev/null 2>&1`);
+};
 $('exitbtn').onclick = () => { send('exitip'); setTimeout(poll, 300); };
-$('autostart').onchange = ev => send('autostart', ev.target.checked ? '1' : '0');
 $('debug').onchange = ev => send('debug', ev.target.checked ? '1' : '0');
 
 // ------------------------------------------------------------ settings
@@ -617,43 +627,21 @@ $('save').onclick = () => {
   send('save', b64).then(() => { toast(S && S.engine.phase !== 'idle' ? '已保存，正在重连' : '已保存'); setTimeout(poll, 400); });
 };
 
-// ------------------------------------------------------------ IMS takeover slots
+// ------------------------------------------------------------ system IMS per slot (read-only)
 async function loadSlots() {
-  const r = await exec(`. ${CONF} 2>/dev/null; echo "$SLOTS"; for s in 0 1; do echo "$s=$(cmd phone ims get-ims-service -s $s -c 2>/dev/null)"; done`);
-  const lines = r.stdout.trim().split('\n');
-  const conf = (lines.shift() || '').split(/\s+/).filter(Boolean);
+  const subs = S ? S.sims.map(x => x.subId) : [];
+  const r = await exec(`for s in 0 1; do echo "$s=$(cmd phone ims get-ims-service -s $s -c 2>/dev/null)"; done; ` +
+    subs.map(x => `echo "m${x}=$(settings get global preferred_network_mode${x})"`).join('; '));
   const bound = {};
-  lines.forEach(l => { const [s, p] = l.split('='); bound[s] = p; });
-  slotBound = bound;
+  r.stdout.trim().split('\n').forEach(l => { const [s, p] = l.split('='); bound[s] = p; });
+  netModes = {};
+  subs.forEach(x => { const v = bound['m' + x]; netModes[x] = /^\d+$/.test(v || '') ? Number(v) : null; });
+  if (subs.length) send('cell');
   $('slots').innerHTML = [0, 1].map(s => {
     const ours = bound[s] === PKG;
-    const who = ours ? '当前由本模块提供' : bound[s] ? '当前由手机自带服务提供' : '当前未接管';
-    return `<div class="item"><div class="grow"><div class="t">卡槽 ${s + 1}</div><div class="s">${who}</div></div>
-      <label class="switch"><input type="checkbox" data-slot="${s}" ${conf.includes(String(s)) ? 'checked' : ''}><span></span></label></div>`;
+    return `<div class="item"><div class="grow"><div class="t">卡槽 ${s + 1}</div></div>
+      <div class="s" style="margin:0;color:${ours ? 'var(--good)' : 'var(--faint)'}">${ours ? '本模块' : bound[s] ? '手机自带' : '无'}</div></div>`;
   }).join('');
-  $('slots').querySelectorAll('input').forEach(i => i.onchange = () => setSlot(Number(i.dataset.slot), i.checked));
-}
-function setSlot(slot, on) {
-  const verb = on ? '接管' : '交还';
-  loadSlots(); // keep the switch as it was until confirmed
-  confirmBox(`${verb}卡槽 ${slot + 1}`, on
-    ? '这张卡的系统 IMS（通话、短信、WLAN 通话开关）改由本模块提供，手机自带的 VoLTE 在此卡槽上停用。'
-    : '这张卡的系统 IMS 恢复由手机自带服务提供，本模块不再处理它的通话和短信。', verb, async () => {
-    await applySlot(slot, on);
-    toast(`已${verb}卡槽 ${slot + 1}`);
-  }, !on);
-}
-/** Takes a slot's system IMS over (on) or hands it back, and records it in ims.conf for boot. */
-async function applySlot(slot, on) {
-  const r = await exec(`. ${CONF} 2>/dev/null; echo "$SLOTS"`);
-  const slots = r.stdout.trim().split(/\s+/).filter(Boolean).filter(x => x !== String(slot));
-  if (on) slots.push(String(slot));
-  slots.sort();
-  const cmd = on
-    ? `cmd phone ims clear-ims-service-override -s ${slot}; sleep 2; cmd phone ims set-ims-service -s ${slot} -c -f 0,1 ${PKG}`
-    : `cmd phone ims clear-ims-service-override -s ${slot}`;
-  await exec(`mkdir -p /data/adb/vowifi && echo 'SLOTS="${slots.join(' ')}"' > ${CONF}; ${cmd} >/dev/null 2>&1`);
-  await loadSlots();
 }
 
 // ------------------------------------------------------------ restore / uninstall
@@ -720,9 +708,10 @@ document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
 (async function main() {
   await send('refresh');
   setTimeout(() => send('exitip'), 600);
-  loadSlots();
   await poll();
+  loadSlots();
   setInterval(() => { if (!document.hidden) poll(); }, 1000);
+  setInterval(() => { if (!document.hidden) loadSlots(); }, 5000);
 })();
 </script>
 </body>

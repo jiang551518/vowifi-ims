@@ -69,6 +69,10 @@ class Settings(context: Context) {
     var autoStart: Boolean
         get() = p.getBoolean("autoStart", false)
         set(v) = p.edit().putBoolean("autoStart", v).apply()
+    /** "Restore native calling" from the WebUI: the system switch no longer drives the module. */
+    var paused: Boolean
+        get() = p.getBoolean("paused", false)
+        set(v) = p.edit().putBoolean("paused", v).apply()
     var enabled: Boolean
         get() = p.getBoolean("enabled", false)
         set(v) = p.edit().putBoolean("enabled", v).apply()

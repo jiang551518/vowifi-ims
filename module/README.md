@@ -53,8 +53,8 @@
 |---|---|
 | `system/priv-app/VoWiFi/VoWiFi.apk` | 以系统特权应用身份安装的 `app.vowifi` |
 | `system/etc/permissions/privapp-permissions-app.vowifi.xml` | 特权权限白名单（空） |
-| `customize.sh` | 安装时生成 `/data/adb/vowifi/ims.conf`，默认接管卡槽 2 |
-| `service.sh` | 每次开机后把配置里的卡槽 IMS 指向本应用 |
+| `customize.sh` | 安装时创建 `/data/adb/vowifi/ims.conf`（App 记录当前接管的卡槽） |
+| `service.sh` | 开机后确认 App 已运行；是否接管由 App 按系统开关决定 |
 | `webroot/index.html` | KernelSU WebUI（状态 / 设置 / 日志） |
 | `action.sh` | 模块管理器「操作」按钮，打印状态摘要 |
 | `uninstall.sh` | 卸载时交还卡槽并清理 |
@@ -97,14 +97,24 @@ IKE_AUTH 里用 SIM 卡做 EAP-AKA（RFC 4187）或 EAP-AKA'（RFC 5448）：
 
 ## 4. 如何接入系统电话
 
+### 总开关：系统「WLAN 通话」开关
+所选 SIM 卡在 设置 → 移动网络 → 卡信息 里的「WLAN 通话」开关就是模块的总开关：
+
+- **打开**：App 把这张卡所在卡槽的系统 IMS 指向自己，然后建隧道、注册。
+- **关闭**：App 注销、停止隧道，撤销跨卡通话设置、语音状态覆盖等改动，再把卡槽交还手机自带的 IMS，VoLTE 立即恢复原生。
+
+WebUI 里的开关和通知栏的「关闭 WiFi 通话」按钮也只是去拨这个系统开关，所以几处永远一致；ColorOS 状态栏的 WiFi 通话图标也要求这个开关开着。
+
+App 是常驻系统进程（`android:persistent`，由模块作为系统应用安装），开机自动运行，ColorOS 不会清理它。它一直监听 SIM 数据库里的这个开关（卡槽交还原生后，系统已不会通知本模块，只能靠自己监听），另外每 60 秒兜底检查一次。切换 eSIM Profile 时按新号码自己的开关决定。
+
 ### 接管卡槽的 IMS 服务
-Android 的 `ImsResolver` 为每个卡槽绑定一个 ImsService。开机后 `service.sh` 执行：
+Android 的 `ImsResolver` 为每个卡槽绑定一个 ImsService。开关打开时 App 执行：
 
 ```sh
 cmd phone ims set-ims-service -s <slot> -c -f 0,1 app.vowifi
 ```
 
-`-f 0,1` 表示同时接管 EMERGENCY_MMTEL(0) 和 MMTEL(1)，高通 IMS 不再处理这个卡槽。否则高通会自己再注册一份 VoWiFi，网络会把来电送给它。这个覆盖不持久，重启后恢复，所以每次开机都要重新执行。卡槽列表在 `/data/adb/vowifi/ims.conf`（`SLOTS="1"` 即卡 2）。
+`-f 0,1` 表示同时接管 EMERGENCY_MMTEL(0) 和 MMTEL(1)，高通 IMS 不再处理这个卡槽。否则高通会自己再注册一份 VoWiFi，网络会把来电送给它。这个覆盖不持久，重启后恢复，开机后由 App 按开关状态重新决定。当前接管的卡槽记在 `/data/adb/vowifi/ims.conf`，供卸载脚本使用。
 
 紧急呼叫不走本模块：不声明紧急通话能力，紧急号码一律交回电路域（CSFB）。
 
@@ -130,8 +140,8 @@ cmd phone ims set-ims-service -s <slot> -c -f 0,1 app.vowifi
 
 运营商名只使用系统从 SIM 卡或网络得到的名称，模块不强制设置品牌名。
 
-### 系统「WLAN 通话」开关
-系统设置里开关 WLAN 通话会经 `changeEnabledCapabilities` 通知本模块，模块据此启停引擎；WebUI 的开关也会启停引擎。切换 eSIM Profile 导致号码（subId）变化时，模块会忽略旧号码的关闭请求，并立即用新号码重连。
+### 网络切换时不闪「无服务」
+隧道因网络切换重建时，20 秒内重新注册成功就不告诉系统掉线，状态栏不会闪「无服务」；超过 20 秒才如实报告。这期间打进来的电话会接不到。
 
 ## 5. 出口网络
 
@@ -144,17 +154,19 @@ cmd phone ims set-ims-service -s <slot> -c -f 0,1 app.vowifi
 另有两个辅助选项：
 
 - **SOCKS5**：设置里可填 SOCKS5（UDP ASSOCIATE）。
-- **绕过透明代理**：选 WiFi 或移动数据时，若手机装了 sing-box 类透明代理（如 NetProxy），模块读取它在 `ip rule` 里的放行标记，并在 iptables mangle 表里只给本应用的流量打上该标记，让隧道直连。停止服务或换回「跟随系统」时删除这条规则。
+- **绕过透明代理**：选 WiFi 或移动数据时，模块读取透明代理在 `ip rule` 里的放行标记，并在 iptables mangle 表里只给本应用的流量打上该标记，让隧道直连。停止服务或换回「跟随系统」时删除这条规则。
 
-首页的出口 IP 和国家按当前出口模式检测，用于判断运营商看到的接入地。部分运营商会按地区拒绝接入。
+**代理只适配了 NetProxy**：[NetProxy](https://github.com/Fanju6/NetProxy-Magisk)（Fanju6/NetProxy-Magisk，基于 sing-box 内核的 Magisk/KernelSU 透明代理模块，测试版本 v8.7.0）。「跟随系统」时隧道经 NetProxy 出去，出口 IP 就是代理节点的 IP；「WiFi / 移动数据」时按上面的方式绕过 NetProxy 直连。其他透明代理（Clash、Box 类模块等）和 VPN 应用没有测试，绕过规则可能不生效。开机时 NetProxy 比本模块启动得晚：「跟随系统」模式下，装了 NetProxy 时模块会先等它就绪（最长 90 秒）再连接，避免先直连被运营商拒绝。
 
-## 6. 与基带 VoLTE 的冲突：「开启时将此卡切换为 2G」
+首页的出口 IP 和国家按当前出口模式检测（跟随系统时即 NetProxy 的出口），用于判断运营商看到的接入地。部分运营商会按地区拒绝接入：例如 EE 系的卡（CTExcel、CMLink UK）从国内 IP 接入会被拒（9003），需要经 NetProxy 走海外节点，且节点要支持 UDP。
 
-同一号码如果基带 VoLTE 也在线，网络通常把来电送给基带。接管后基带的来电交不到系统，会表现为「对方听到暂时无法接通」。这个开关在 WiFi 通话运行时用 power 原因把该 SIM 的允许网络限制为 2G：
+## 6. 蜂窝网络与基带 VoLTE
 
-- 基带 VoLTE 随之下线，另一张卡不受影响。
-- 关闭时恢复原来的网络类型。
-- 用户在系统设置里选的网络模式不受影响。
+**首选网络类型由系统设置管理**。WebUI 只显示两个卡槽各自的首选网络类型、当前网络（2G/3G/4G/5G NSA/5G SA、是否漫游）、频段与信道、载波带宽和信号（RSRP/RSRQ/SINR）；点卡片会打开系统里这张卡的设置页去修改。
+
+同一号码如果基带 VoLTE 也在线，网络通常把来电送给基带。接管后基带的来电交不到系统，会表现为「对方听到暂时无法接通」。常规做法是在系统设置里把这张卡的首选网络类型改成不含 4G/5G 的类型。
+
+WebUI 的「测试功能」里还保留了「开启时将此卡切换为 2G」（实验，慎用）：WiFi 通话运行期间用系统界面看不到的 power 原因把这张卡锁在 2G，关闭时恢复；不改系统设置里的首选网络类型。代价是信号明显变差，没有 2G 网络的地方会完全无信号。
 
 ## 7. 管理界面（WebUI）
 
@@ -165,18 +177,17 @@ App 没有界面，整个管理界面就是 `webroot/index.html`，运行在 Ker
   ```sh
   am broadcast -n app.vowifi/.control.ControlReceiver -a app.vowifi.CONTROL --es cmd <命令> [--es arg <参数>]
   ```
-  控制 App，可用命令有 start / stop / restart / sim / net / radio / save / restore 等。接收器要求发送方持有 `MODIFY_PHONE_STATE`，只有 root、shell 和系统能调用，普通应用不能。
-- **启停**：开关 WiFi 通话时用 `am start-foreground-service -a app.vowifi.START/STOP`。
-- **接管卡槽**：直接修改 `ims.conf` 并执行 `set-ims-service` / `clear-ims-service-override`。
+  控制 App，可用命令有 start / stop（拨系统 WLAN 通话开关）/ restart / sim / net / cell / radio / save / restore 等。接收器要求发送方持有 `MODIFY_PHONE_STATE`，只有 root、shell 和系统能调用，普通应用不能。
+- **卡槽状态**：只读显示每个卡槽当前由本模块还是手机自带服务提供 IMS。
 - **日志**：读取 `files/logs/app.log`，可按级别筛选。日志不记录 IMSI、ICCID 和手机号全文。
 
 ## 8. 恢复原生与卸载
 
 只关掉 WiFi 通话**不等于**恢复原生：卡槽仍被接管，基带收到的来电交不到系统。所以：
 
-- **关闭开关时**，WebUI 会问「恢复原生 / 仅关闭」。选恢复原生时，模块依次停止引擎、撤销 2G 限制、跨卡通话设置、语音状态覆盖和品牌覆盖，再把卡槽交还给手机自带的 IMS。
+- **关闭系统 WLAN 通话开关（或 WebUI 开关）**：模块停止引擎，撤销 2G 限制、跨卡通话设置、语音状态覆盖，再把卡槽交还手机自带的 IMS。
 - **设置 → 恢复与卸载**：
-  - 「恢复手机原生通话」：交还所有卡槽，保留模块。
+  - 「恢复手机原生通话」：交还所有卡槽并暂停模块，系统开关不再启动它；在 WebUI 里重新打开 WiFi 通话即可恢复。
   - 「恢复原生并卸载模块」：在此基础上删除模块和 App，重启后完全回到原状。
 - **直接在模块管理器里卸载**：`uninstall.sh` 在下次开机后交还卡槽，让 App 自行撤销系统改动，再删除 App 和 `/data/adb/vowifi`。
 

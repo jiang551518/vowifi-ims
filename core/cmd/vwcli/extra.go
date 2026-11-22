@@ -49,6 +49,15 @@ func runExtra(ctx context.Context, h *sim.Helper, args []string) error {
 		err := h.Call(ctx, "svcstate", map[string]any{"slot": slot}, &resp)
 		fmt.Println(resp["result"], err)
 		return nil
+	case "cellinfo":
+		// cellinfo <slot> <subId>  ->  JSON snapshot (network, band, signal)
+		var resp map[string]any
+		var slot, sub int
+		fmt.Sscanf(args[1], "%d", &slot)
+		fmt.Sscanf(args[2], "%d", &sub)
+		err := h.Call(ctx, "cellinfo", map[string]any{"slot": slot, "subId": sub}, &resp)
+		fmt.Println(resp["result"], err)
+		return nil
 	case "methods":
 		var resp map[string]any
 		err := h.Call(ctx, "methods", map[string]any{"service": args[1], "filter": args[2]}, &resp)

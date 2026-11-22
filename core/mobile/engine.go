@@ -238,9 +238,16 @@ func (e *Engine) Start(configJSON string) error {
 	if err := json.Unmarshal([]byte(configJSON), &cfg); err != nil {
 		return fmt.Errorf("bad config: %w", err)
 	}
+	// Claim the new generation before stopping the old loop: a replaced loop is
+	// then no longer current and does not report "idle" (a restart is not a
+	// stop, and the app keeps the system registration through a quick restart).
+	e.mu.Lock()
+	e.gen++
+	gen := e.gen
+	e.mu.Unlock()
 	e.Stop()
 	// Let the previous session finish tearing down first: otherwise its late
-	// "idle" status and cleared UA overwrite the new, registered session.
+	// cleared UA overwrites the new, registered session.
 	e.mu.Lock()
 	old := e.done
 	e.mu.Unlock()
@@ -257,8 +264,6 @@ func (e *Engine) Start(configJSON string) error {
 	e.cancel = cancel
 	e.kick = make(chan struct{}, 1)
 	e.running = true
-	e.gen++
-	gen := e.gen
 	e.done = done
 	kick := e.kick
 	e.mu.Unlock()
@@ -962,6 +967,47 @@ func (e *Engine) SetCrossSimCalling(subID int, on bool) (bool, error) {
 		Result string `json:"result"`
 	}
 	err = h.Call(ctx, "crosssim", map[string]any{"subId": subID, "on": on}, &resp)
+	return resp.Result == "true", err
+}
+
+// CellInfoJSON returns a read-only cellular snapshot of a SIM (radio
+// technology, band / channel, bandwidths, signal) as JSON.
+func (e *Engine) CellInfoJSON(slot, subID int) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	h, err := e.getHelper(ctx)
+	if err != nil {
+		return "", err
+	}
+	var resp struct {
+		Result string `json:"result"`
+	}
+	err = h.Call(ctx, "cellinfo", map[string]any{"slot": slot, "subId": subID}, &resp)
+	return resp.Result, err
+}
+
+// WifiCallingSetting returns the SIM's system "WLAN calling" switch.
+func (e *Engine) WifiCallingSetting(subID int) (bool, error) {
+	return e.wfcSetting(map[string]any{"subId": subID})
+}
+
+// SetWifiCallingSetting sets the SIM's system "WLAN calling" switch and
+// returns its previous value.
+func (e *Engine) SetWifiCallingSetting(subID int, on bool) (bool, error) {
+	return e.wfcSetting(map[string]any{"subId": subID, "on": on})
+}
+
+func (e *Engine) wfcSetting(req map[string]any) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	h, err := e.getHelper(ctx)
+	if err != nil {
+		return false, err
+	}
+	var resp struct {
+		Result string `json:"result"`
+	}
+	err = h.Call(ctx, "wfc", req, &resp)
 	return resp.Result == "true", err
 }
 

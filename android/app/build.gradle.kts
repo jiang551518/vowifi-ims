@@ -10,8 +10,8 @@ android {
         applicationId = "app.vowifi"
         minSdk = 31
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 3
+        versionName = "0.3.0"
         testInstrumentationRunner = "app.vowifi.CallSmokeInstrumentation"
         ndk { abiFilters += "arm64-v8a" }
     }
@@ -26,7 +26,9 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    packaging { jniLibs { useLegacyPackaging = true } }
+    // Native libraries stay uncompressed in the APK and load from it directly:
+    // a system app (installed by the module) never gets them extracted.
+    packaging { jniLibs { useLegacyPackaging = false } }
 }
 
 dependencies {

@@ -1,6 +1,6 @@
 id=vowifi_ims
 name=WiFi 通话 IMS 服务
-version=v0.2.0
-versionCode=2
+version=v0.3.0
+versionCode=3
 author=Claude Code & Lucas Jiang
-description=WiFi 通话 IMS 服务：接管所选 SIM 卡槽的系统 IMS，用软件建立 VoWiFi（可走 WiFi、移动数据或代理），系统拨号器、短信和设置里的 WLAN 通话直接可用。在 KernelSU 中点本模块打开 WebUI 管理（Magisk 可用 KsuWebUI/MMRL）；WebUI 可一键恢复原生通话或卸载。⚠ 目前仅在 realme RMX6699（Android 16 / ColorOS / 骁龙，KernelSU）上验证可用，其他机型、系统和 root 方案均未测试，请自行评估风险。
+description=WiFi 通话 IMS 服务：用软件建立 VoWiFi（可走 WiFi、移动数据或代理）。打开所选 SIM 卡的系统「WLAN 通话」开关即接管该卡的系统 IMS，系统拨号器和短信直接可用；关闭即交还手机原生通话。在 KernelSU 中点本模块打开 WebUI 管理（Magisk 可用 KsuWebUI/MMRL）；WebUI 可一键恢复原生通话或卸载。⚠ 目前仅在 realme RMX6699（Android 16 / ColorOS / 骁龙，KernelSU）上验证可用，其他机型、系统和 root 方案均未测试，请自行评估风险。

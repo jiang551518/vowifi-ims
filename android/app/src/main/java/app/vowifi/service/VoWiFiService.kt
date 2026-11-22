@@ -75,6 +75,11 @@ class VoWiFiService : LifecycleService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
         when (intent?.action) {
+            ACTION_SWITCH_OFF -> {
+                // Notification button: turn the system switch off (stops and hands the slot back).
+                app.vowifi.WfcSync.setSwitch(false)
+                return START_STICKY
+            }
             ACTION_STOP -> {
                 Core.settings.enabled = false
                 Core.engine.stop()
@@ -188,6 +193,7 @@ class VoWiFiService : LifecycleService() {
     companion object {
         const val ACTION_START = "app.vowifi.START"
         const val ACTION_STOP = "app.vowifi.STOP"
+        const val ACTION_SWITCH_OFF = "app.vowifi.SWITCH_OFF"
 
         fun start(ctx: Context) {
             ctx.startForegroundService(Intent(ctx, VoWiFiService::class.java).setAction(ACTION_START))

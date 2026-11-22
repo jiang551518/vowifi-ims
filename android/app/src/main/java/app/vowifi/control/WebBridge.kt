@@ -3,6 +3,7 @@ package app.vowifi.control
 import app.vowifi.Core
 import app.vowifi.EngineStatus
 import app.vowifi.SimInfo
+import app.vowifi.WfcSync
 import app.vowifi.ims.ImsHub
 import app.vowifi.service.ExitIp
 import app.vowifi.service.VoWiFiService
@@ -31,6 +32,8 @@ object WebBridge {
         val note: String = "",
         /** "running:<id>" / "done:<id>": progress of [restoreNative] for the WebUI's request id. */
         val restore: String = "",
+        /** Cellular status of every SIM, by slot (see [CellText]). */
+        val cell: JSONArray? = null,
     )
 
     val extra = MutableStateFlow(Extra())
@@ -60,10 +63,12 @@ object WebBridge {
             .put("rootError", Core.rootError.value ?: "")
             .put("inCall", Core.calls.value.values.any { it.state != "ended" })
             .put("ims", JSONObject()
-                .put("active", s.subId > 0 && ImsHub.isActive(s.subId)))
+                .put("active", s.subId > 0 && ImsHub.isActive(s.subId))
+                .put("switch", WfcSync.lastSwitch ?: JSONObject.NULL)
+                .put("paused", s.paused))
         val x = extra.value
         o.put("exitIp", x.exitIp).put("exitChecking", x.exitChecking).put("radioBusy", x.radioBusy).put("note", x.note)
-            .put("restore", x.restore)
+            .put("restore", x.restore).put("cell", x.cell ?: JSONArray())
         o.put("settings", JSONObject()
             .put("subId", s.subId).put("simSlot", s.simSlot).put("enabled", s.enabled)
             .put("networkMode", s.networkMode).put("radioOffWhileOn", s.radioOffWhileOn)
@@ -95,19 +100,27 @@ object WebBridge {
 
     // ------------------------------------------------------------ commands
 
+    /** Turns the chosen SIM's system WLAN calling switch on: the module takes the slot over and connects. */
     fun startWifiCalling(): String {
         if (Core.settings.subId == -1) return "请先选择 SIM 卡"
-        VoWiFiService.start(Core.app)
+        WfcSync.setSwitch(true)
         return ""
     }
 
-    fun stopWifiCalling() = VoWiFiService.stop(Core.app)
+    /** Turns the system switch off: WiFi calling stops and the slot goes back to the phone's own IMS. */
+    fun stopWifiCalling() = WfcSync.setSwitch(false)
 
+    /**
+     * Chooses the SIM the module serves. Its own system switch then decides; the
+     * previous SIM's slot is handed back to the phone's own IMS.
+     */
     fun selectSim(subId: Int) {
         val sim = Core.sims.value.firstOrNull { it.subId == subId } ?: return
+        val changed = sim.subId != Core.settings.subId
         Core.settings.subId = sim.subId
         Core.settings.simSlot = sim.slot
-        if (Core.status.value.phase != "idle") VoWiFiService.start(Core.app)
+        if (changed && Core.status.value.phase != "idle") VoWiFiService.start(Core.app)
+        WfcSync.request("sim", 300)
         touch()
     }
 
@@ -134,6 +147,24 @@ object WebBridge {
                         "检测失败，详情见日志"
                     })
             extra.value = extra.value.copy(exitIp = text, exitChecking = false)
+        }
+    }
+
+    /**
+     * Read-only cellular status of every SIM for the WebUI (network type, band,
+     * signal). The preferred network type itself is changed in
+     * the system Settings only.
+     */
+    fun refreshCell() {
+        val sims = Core.sims.value
+        if (sims.isEmpty()) return
+        Core.scope.launch(Dispatchers.IO) {
+            val arr = JSONArray()
+            for (sim in sims.sortedBy { it.slot }) {
+                val o = runCatching { JSONObject(Core.engine.cellInfoJSON(sim.slot.toLong(), sim.subId.toLong())) }.getOrNull() ?: continue
+                arr.put(CellText.format(o).put("slot", sim.slot).put("subId", sim.subId).put("name", operatorName(sim)))
+            }
+            extra.value = extra.value.copy(cell = arr)
         }
     }
 
@@ -218,6 +249,9 @@ object WebBridge {
         Core.scope.launch(Dispatchers.IO) {
             try {
                 Core.settings.autoStart = false
+                // Paused: the system switch no longer drives the module (until it is
+                // turned on from the WebUI again); hands the slot back.
+                WfcSync.pause()
                 if (Core.status.value.phase != "idle") {
                     VoWiFiService.stop(Core.app)
                     val deadline = System.currentTimeMillis() + 15_000

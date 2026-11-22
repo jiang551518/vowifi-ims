@@ -6,6 +6,9 @@ APK="$ROOT/android/app/build/outputs/apk/debug/app-debug.apk"
 [ -f "$APK" ] || { echo "build the APK first (./gradlew assembleDebug)"; exit 1; }
 mkdir -p "$ROOT/module/system/priv-app/VoWiFi"
 cp "$APK" "$ROOT/module/system/priv-app/VoWiFi/VoWiFi.apk"
+# Native libraries load straight from the APK (stored uncompressed), so no
+# lib/ directory is shipped next to it.
+rm -rf "$ROOT/module/system/priv-app/VoWiFi/lib"
 mkdir -p "$ROOT/dist"
 rm -f "$ROOT/dist/vowifi-ims-module.zip"
 cd "$ROOT/module"

@@ -190,6 +190,56 @@ public final class RootHelper {
                 resp.put("result", v + "," + d + "," + m + "," + rat);
                 break;
             }
+            case "cellinfo": {
+                // Read-only cellular snapshot of one SIM for the WebUI: radio
+                // technology, band / channel, channel bandwidths and signal.
+                // Location access is not renounced: the cell identity (band,
+                // channel) is location data and would be stripped otherwise.
+                Object ss = call(phone(), "getServiceStateForSlot",
+                        new Object[]{req.getInt("slot"), false, false, "android", null});
+                JSONObject o = new JSONObject();
+                for (Object nri : (java.util.List<?>) ss.getClass().getMethod("getNetworkRegistrationInfoList").invoke(ss)) {
+                    // Cellular (WWAN) registration; prefer the data (PS) domain.
+                    if ((int) nri.getClass().getMethod("getTransportType").invoke(nri) != 1) continue;
+                    int domain = (int) nri.getClass().getMethod("getDomain").invoke(nri);
+                    if (o.has("rat") && (domain & 2) == 0) continue;
+                    o.put("rat", nri.getClass().getMethod("getAccessNetworkTechnology").invoke(nri));
+                    o.put("reg", nri.getClass().getMethod("getNetworkRegistrationState").invoke(nri));
+                    Object ci = nri.getClass().getMethod("getCellIdentity").invoke(nri);
+                    if (ci != null) {
+                        o.put("cell", ci.getClass().getSimpleName());
+                        for (String m : new String[]{"getBands", "getEarfcn", "getNrarfcn", "getUarfcn", "getArfcn", "getPci"}) {
+                            try {
+                                Object v = ci.getClass().getMethod(m).invoke(ci);
+                                if (v instanceof int[]) { JSONArray a = new JSONArray(); for (int b : (int[]) v) a.put(b); v = a; }
+                                o.put(m.substring(3).toLowerCase(java.util.Locale.ROOT), v);
+                            } catch (NoSuchMethodException ignored) { }
+                        }
+                    }
+                }
+                try {
+                    int[] bw = (int[]) ss.getClass().getMethod("getCellBandwidths").invoke(ss);
+                    JSONArray a = new JSONArray(); for (int b : bw) a.put(b); o.put("bandwidths", a);
+                } catch (Throwable ignored) { }
+                try { o.put("nrState", ss.getClass().getMethod("getNrState").invoke(ss)); } catch (Throwable ignored) { }
+                try { o.put("roaming", ss.getClass().getMethod("getRoaming").invoke(ss)); } catch (Throwable ignored) { }
+                try {
+                    Object sig = call(phone(), "getSignalStrength", new Object[]{req.getInt("subId")});
+                    for (Object c : (java.util.List<?>) sig.getClass().getMethod("getCellSignalStrengths").invoke(sig)) {
+                        JSONObject s = new JSONObject();
+                        s.put("type", c.getClass().getSimpleName());
+                        s.put("dbm", c.getClass().getMethod("getDbm").invoke(c));
+                        s.put("level", c.getClass().getMethod("getLevel").invoke(c));
+                        for (String m : new String[]{"getRsrp", "getRsrq", "getRssnr", "getSsRsrp", "getSsSinr"}) {
+                            try { s.put(m.substring(3).toLowerCase(java.util.Locale.ROOT), c.getClass().getMethod(m).invoke(c)); }
+                            catch (NoSuchMethodException ignored) { }
+                        }
+                        o.append("signal", s);
+                    }
+                } catch (Throwable ignored) { }
+                resp.put("result", o.toString());
+                break;
+            }
             case "netselmode": {
                 // 1 = automatic, 2 = manual, 0 = unknown.
                 Object r = call(phone(), "getNetworkSelectionMode", new Object[]{req.getInt("subId")});
@@ -219,6 +269,15 @@ public final class RootHelper {
                 // is cross-SIM and this setting is on. Returns the previous value.
                 Object before = call(phone(), "isCrossSimCallingEnabledByUser", new Object[]{req.getInt("subId")});
                 if (req.has("on")) call(phone(), "setCrossSimCallingEnabled", new Object[]{req.getInt("subId"), req.getBoolean("on")});
+                resp.put("result", String.valueOf(before));
+                break;
+            }
+            case "wfc": {
+                // The per-SIM system "WLAN calling" switch (Settings > SIM). It is the
+                // module's master switch: on = take the slot over and connect, off =
+                // disconnect and hand the slot back. Returns the value before "on".
+                Object before = call(phone(), "isVoWiFiSettingEnabled", new Object[]{req.getInt("subId")});
+                if (req.has("on")) call(phone(), "setVoWiFiSettingEnabled", new Object[]{req.getInt("subId"), req.getBoolean("on")});
                 resp.put("result", String.valueOf(before));
                 break;
             }

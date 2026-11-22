@@ -9,6 +9,7 @@ local.properties
 # Build outputs (rebuild with the commands in README)
 *.apk
 *.aar
+*.so
 android/**/build/
 android/.gradle/
 android/.kotlin/
