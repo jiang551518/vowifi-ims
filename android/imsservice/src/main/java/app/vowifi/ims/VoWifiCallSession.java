@@ -247,6 +247,11 @@ final class VoWifiCallSession extends ImsCallSessionImplBase {
         else if (sip >= 500) code = ImsReasonInfo.CODE_SIP_SERVER_ERROR;
         else if (r.startsWith("network error")) code = ImsReasonInfo.CODE_LOCAL_NETWORK_NO_SERVICE;
         else code = ImsReasonInfo.CODE_UNSPECIFIED;
+        // Carrier online charging refused the call (e.g. 487 "CC_DIAM_CREDIT_LIMIT_REACHED").
+        String u = r.toUpperCase(java.util.Locale.ROOT);
+        if (u.contains("CREDIT_LIMIT") || u.contains("INSUFFICIENT") || u.contains("OUT_OF_CREDIT") || u.contains("NO_CREDIT")) {
+            r = "余额不足（" + r + "）";
+        }
         return new ImsReasonInfo(code, sip, r);
     }
 }

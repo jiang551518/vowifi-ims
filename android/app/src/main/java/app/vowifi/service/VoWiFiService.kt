@@ -33,6 +33,9 @@ class VoWiFiService : LifecycleService() {
     private var subsListener: android.telephony.SubscriptionManager.OnSubscriptionsChangedListener? = null
     private var subsJob: Job? = null
 
+    /** Set once the service is stopping: no more notification updates (a late one would outlive the service). */
+    @Volatile private var stopping = false
+
     override fun onCreate() {
         super.onCreate()
         // A profile switch on an eSIM card (or a card swap) replaces the slot's
@@ -51,7 +54,7 @@ class VoWiFiService : LifecycleService() {
         lifecycleScope.launch {
             var lastPhase = ""
             Core.status.collect { st ->
-                Notifications.updateService(this@VoWiFiService, st)
+                if (!stopping) Notifications.updateService(this@VoWiFiService, st)
                 // A proxy started after us adds its rules later: re-apply once per failure.
                 if (st.phase == "waiting" && lastPhase != "waiting" && Core.settings.networkMode != "auto") {
                     syncBypass(force = true)
@@ -61,6 +64,7 @@ class VoWiFiService : LifecycleService() {
         }
         lifecycleScope.launch {
             Core.calls.collect { calls ->
+                if (stopping) return@collect
                 val active = calls.values.any { it.state == "active" || it.state == "ringing" || it.state == "dialing" }
                 val type = if (active) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
                 else ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
@@ -78,10 +82,19 @@ class VoWiFiService : LifecycleService() {
         when (intent?.action) {
             ACTION_SWITCH_OFF -> {
                 // Notification button: turn the system switch off (stops and hands the slot back).
+                if (!stopping) runCatching { Notifications.updateService(this, Core.status.value, closing = true) }
                 app.vowifi.WfcSync.setSwitch(false)
+                // Already stopped (e.g. a leftover notification restarted the service):
+                // nothing else will stop it, so go away now.
+                if (!Core.settings.enabled && Core.status.value.phase == "idle") {
+                    stopping = true
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
                 return START_STICKY
             }
             ACTION_STOP -> {
+                stopping = true
                 Core.settings.enabled = false
                 Core.engine.stop()
                 bypassMode = null
@@ -90,6 +103,7 @@ class VoWiFiService : LifecycleService() {
                 return START_NOT_STICKY
             }
             else -> {
+                stopping = false
                 Core.settings.enabled = true
                 // Re-read the SIMs first so a switched eSIM profile is picked up
                 // before connecting (Core follows the chosen slot).
@@ -181,6 +195,9 @@ class VoWiFiService : LifecycleService() {
     }
 
     override fun onDestroy() {
+        stopping = true
+        runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
+        runCatching { getSystemService(android.app.NotificationManager::class.java).cancel(Notifications.SERVICE_ID) }
         // Never leave the SIM without cellular service once WiFi calling stops.
         Thread { Core.syncCellularRadio(false) }.start()
         if (bypassMode != null && bypassMode != "auto") Thread { ProxyBypass.apply(false) }.start()

@@ -26,6 +26,13 @@ import java.util.concurrent.TimeUnit
 object WfcSync {
     private val exec = Executors.newSingleThreadScheduledExecutor()
     private var pending: ScheduledFuture<*>? = null
+    /**
+     * Guards [pending] only. Not the object lock: [evaluate] holds that while it
+     * waits for the service to stop, and the service's stop command runs on the
+     * main thread, which also calls [request] (subscription changes) — sharing
+     * one lock stalled every stop for the full 15 s timeout.
+     */
+    private val pendingLock = Any()
     @Volatile private var ready = false
 
     /** Slot whose IMS this app took over, as last applied (-1 = none). */
@@ -65,7 +72,7 @@ object WfcSync {
     /** Re-checks the switch soon (debounced). [refresh] re-reads the SIM list first. */
     fun request(reason: String, delayMs: Long = 500, refresh: Boolean = false) {
         if (!ready) return
-        synchronized(this) {
+        synchronized(pendingLock) {
             pending?.cancel(false)
             pending = exec.schedule({
                 if (refresh) Core.refreshSimsBlocking()

@@ -476,6 +476,10 @@ object Core {
                     CallAudio.stop(c.id)
                     appendLog("INFO", "RTP 收 ${c.rxPackets} 包，发 ${c.txPackets} 包")
                     appendLog("INFO", "call ended: ${c.reason} ${if (c.sipCode != 0) c.sipCode else ""}")
+                    callFailHint(c.reason)?.let { hint ->
+                        appendLog("WARN", "通话失败：$hint（网络原因 ${c.reason}）")
+                        runCatching { Notifications.showCallHint(app, "通话失败：余额不足", hint) }
+                    }
                     scope.launch { kotlinx.coroutines.delay(2500); _calls.update { it - c.id } }
                 }
             }
@@ -492,6 +496,20 @@ object Core {
                 CallAudio.stop(c.id)
                 scope.launch { kotlinx.coroutines.delay(2500); _calls.update { it - c.id } }
             }
+        }
+    }
+
+    /**
+     * Chinese explanation for call failures the user can act on, from the
+     * network's Reason text (e.g. 487 with "CC_DIAM_CREDIT_LIMIT_REACHED": the
+     * carrier's online charging (Diameter Credit-Control) refused the call).
+     */
+    fun callFailHint(reason: String?): String? {
+        val r = reason?.uppercase() ?: return null
+        return when {
+            "CREDIT_LIMIT" in r || "INSUFFICIENT" in r || "OUT_OF_CREDIT" in r || "NO_CREDIT" in r ->
+                "此卡余额不足（运营商计费系统拒绝了本次通话），请充值后再拨"
+            else -> null
         }
     }
 

@@ -15,11 +15,13 @@ object Notifications {
     const val SERVICE_ID = 1
     private const val CH_SERVICE = "service"
     private const val CH_SMS = "sms"
+    private const val CH_CALL_HINT = "call_hint"
 
     fun ensureChannels(ctx: Context) {
         val nm = ctx.getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel(CH_SERVICE, "WiFi 通话 状态", NotificationManager.IMPORTANCE_LOW))
         nm.createNotificationChannel(NotificationChannel(CH_SMS, "短信", NotificationManager.IMPORTANCE_HIGH))
+        nm.createNotificationChannel(NotificationChannel(CH_CALL_HINT, "通话失败提示", NotificationManager.IMPORTANCE_HIGH))
         // Calls now ring and show in the system phone app; drop the old app channels.
         nm.deleteNotificationChannel("call")
         nm.deleteNotificationChannel("missed_calls")
@@ -34,8 +36,8 @@ object Notifications {
         else -> "WiFi 通话 未启用" to ""
     }
 
-    fun service(ctx: Context, st: EngineStatus): Notification {
-        val (title, text) = label(st)
+    fun service(ctx: Context, st: EngineStatus, closing: Boolean = false): Notification {
+        val (title, text) = if (closing) "正在关闭 WiFi 通话…" to "交还系统 IMS 并恢复原生通话" else label(st)
         val stop = PendingIntent.getService(ctx, 1,
             Intent(ctx, VoWiFiService::class.java).setAction(VoWiFiService.ACTION_SWITCH_OFF), PendingIntent.FLAG_IMMUTABLE)
         return Notification.Builder(ctx, CH_SERVICE)
@@ -47,9 +49,24 @@ object Notifications {
             .build()
     }
 
-    fun updateService(ctx: Context, st: EngineStatus) {
-        ctx.getSystemService(NotificationManager::class.java).notify(SERVICE_ID, service(ctx, st))
+    fun updateService(ctx: Context, st: EngineStatus, closing: Boolean = false) {
+        ctx.getSystemService(NotificationManager::class.java).notify(SERVICE_ID, service(ctx, st, closing))
     }
+
+    /** Why a call failed, when the system dialer only says "call ended". */
+    fun showCallHint(ctx: Context, title: String, text: String) {
+        ensureChannels(ctx)
+        val n = Notification.Builder(ctx, CH_CALL_HINT)
+            .setSmallIcon(R.drawable.ic_launcher_fg)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(Notification.BigTextStyle().bigText(text))
+            .setAutoCancel(true)
+            .build()
+        ctx.getSystemService(NotificationManager::class.java).notify(CALL_HINT_ID, n)
+    }
+
+    private const val CALL_HINT_ID = 900
 
     fun showSms(ctx: Context, from: String, text: String) {
         val n = Notification.Builder(ctx, CH_SMS)
