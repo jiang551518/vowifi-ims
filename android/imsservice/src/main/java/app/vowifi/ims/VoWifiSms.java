@@ -43,10 +43,18 @@ final class VoWifiSms extends ImsSmsImplBase {
     public void sendSms(int token, int messageRef, String format, String smsc, boolean isRetry, byte[] pdu) {
         feature.executor.execute(() -> {
             ImsHub.Backend b = ImsHub.backend;
+            String address;
+            try {
+                address = SmscAddress.fromIms(smsc);
+            } catch (IllegalArgumentException e) {
+                ImsHub.log("WARN", e.getMessage());
+                onSendSmsResultError(token, messageRef, SEND_STATUS_ERROR, RESULT_ERROR_GENERIC_FAILURE, -1);
+                return;
+            }
             int cause;
             try {
                 if (b == null) throw new IllegalStateException("app not ready");
-                cause = b.sendSms(feature.subId, smsc, pdu);
+                cause = b.sendSms(feature.subId, address, pdu);
             } catch (Throwable t) {
                 ImsHub.log("WARN", "系统短信发送失败: " + t.getMessage());
                 onSendSmsResultError(token, messageRef, SEND_STATUS_ERROR_RETRY, RESULT_ERROR_NO_SERVICE, -1);
